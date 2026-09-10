@@ -234,18 +234,13 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Text(
-                'Importer une vidéo',
-                style: TextStyle(
-                  fontSize: 24,
-                  fontWeight: FontWeight.bold,
-                ),
-              ),
-              const SizedBox(height: 8),
-              const Text(
+              Text(
                 'Choisis une vidéo déjà présente sur ton téléphone. '
                 'Tu pourras compléter les ingrédients et les étapes '
                 'ensuite, avec ou sans l’aide de l’IA.',
+                style: TextStyle(
+                  color: Theme.of(context).colorScheme.onSurfaceVariant,
+                ),
               ),
               const SizedBox(height: 24),
 
@@ -253,46 +248,66 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
               // SÉLECTION DE LA VIDÉO
               // ========================================================
 
-              Container(
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  border: Border.all(
-                    color: Theme.of(context).colorScheme.outline,
+              InkWell(
+                onTap: _isLoading ? null : _pickVideo,
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: Theme.of(context)
+                        .colorScheme
+                        .surfaceContainerHighest,
+                    borderRadius: BorderRadius.circular(16),
                   ),
-                  borderRadius: BorderRadius.circular(12),
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      _selectedVideo == null
-                          ? Icons.video_call_outlined
-                          : Icons.check_circle_outline,
-                      color: _selectedVideo == null
-                          ? null
-                          : Theme.of(context).colorScheme.primary,
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: Text(
-                        _selectedVideo == null
-                            ? 'Aucune vidéo sélectionnée'
-                            : _selectedVideo!.name,
-                        overflow: TextOverflow.ellipsis,
+                  child: Row(
+                    children: [
+                      CircleAvatar(
+                        backgroundColor: _selectedVideo == null
+                            ? Theme.of(context).colorScheme.surface
+                            : Theme.of(context).colorScheme.primary,
+                        child: Icon(
+                          _selectedVideo == null
+                              ? Icons.video_call_outlined
+                              : Icons.check,
+                          color: _selectedVideo == null
+                              ? Theme.of(context).colorScheme.onSurfaceVariant
+                              : Colors.white,
+                        ),
                       ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 12),
-
-              OutlinedButton.icon(
-                onPressed: _isLoading ? null : _pickVideo,
-                icon: const Icon(Icons.video_library_outlined),
-                label: Text(
-                  _selectedVideo == null
-                      ? 'Choisir une vidéo'
-                      : 'Changer de vidéo',
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              _selectedVideo == null
+                                  ? 'Choisir une vidéo'
+                                  : 'Vidéo sélectionnée',
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                            if (_selectedVideo != null)
+                              Text(
+                                _selectedVideo!.name,
+                                maxLines: 1,
+                                overflow: TextOverflow.ellipsis,
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                      Icon(
+                        Icons.chevron_right,
+                        color: Theme.of(context).colorScheme.onSurfaceVariant,
+                      ),
+                    ],
+                  ),
                 ),
               ),
 

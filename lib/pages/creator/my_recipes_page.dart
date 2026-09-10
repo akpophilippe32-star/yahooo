@@ -224,135 +224,105 @@ class _MyRecipesPageState extends State<MyRecipesPage> {
   // ============================================================
 
   Widget _buildRecipeCard(RecipeModel recipe) {
-    return Card(
-      margin: const EdgeInsets.only(bottom: 16),
+    final colorScheme = Theme.of(context).colorScheme;
 
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
       child: InkWell(
-        borderRadius: BorderRadius.circular(12),
-
-        // ========================================================
-        // CLIC SUR LA RECETTE
-        // ========================================================
-
-        onTap: () {
-          _openRecipeDetail(recipe);
-        },
-
+        borderRadius: BorderRadius.circular(16),
+        onTap: () => _openRecipeDetail(recipe),
         child: Padding(
-          padding: const EdgeInsets.all(16),
-
-          child: Column(
+          padding: const EdgeInsets.all(12),
+          child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
-
             children: [
               // ==================================================
-              // TITRE
+              // MINIATURE
               // ==================================================
 
-              Text(
-                recipe.title,
+              ClipRRect(
+                borderRadius: BorderRadius.circular(12),
+                child: SizedBox(
+                  width: 72,
+                  height: 72,
+                  child: recipe.sourceType == 'video'
+                      ? Container(
+                          color: colorScheme.surface,
+                          child: Icon(
+                            Icons.play_circle_outline,
+                            color: colorScheme.onSurfaceVariant,
+                          ),
+                        )
+                      : FutureBuilder<String?>(
+                          future: _recipeRepository
+                              .getRecipeImageUrl(recipe.imageUrl),
+                          builder: (context, snapshot) {
+                            final url = snapshot.data;
 
-                style: const TextStyle(
-                  fontSize: 20,
-                  fontWeight: FontWeight.bold,
+                            return Container(
+                              color: colorScheme.surface,
+                              child: url != null
+                                  ? Image.network(
+                                      url,
+                                      fit: BoxFit.cover,
+                                      errorBuilder: (context, error, stack) {
+                                        return const Icon(Icons.restaurant);
+                                      },
+                                    )
+                                  : Icon(
+                                      Icons.restaurant,
+                                      color: colorScheme.onSurfaceVariant,
+                                    ),
+                            );
+                          },
+                        ),
                 ),
               ),
 
-              const SizedBox(height: 8),
+              const SizedBox(width: 14),
 
               // ==================================================
-              // CATÉGORIE
+              // CONTENU
               // ==================================================
 
-              if (recipe.categoryName != null)
-                Text(
-                  recipe.categoryName!,
-
-                  style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary,
-                    fontWeight: FontWeight.w500,
-                  ),
-                ),
-
-              const SizedBox(height: 12),
-
-              // ==================================================
-              // STATUT
-              // ==================================================
-
-              Row(
-                children: [
-                  _buildStatusBadge(recipe.status),
-
-                  const Spacer(),
-
-                  if (recipe.createdAt != null)
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
                     Text(
-                      _formatDate(recipe.createdAt!),
-
-                      style: TextStyle(
-                        fontSize: 12,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .onSurfaceVariant,
+                      recipe.title,
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: const TextStyle(
+                        fontSize: 15,
+                        fontWeight: FontWeight.w700,
                       ),
                     ),
-                ],
+                    if (recipe.categoryName != null)
+                      Padding(
+                        padding: const EdgeInsets.only(top: 2),
+                        child: Text(
+                          recipe.categoryName!,
+                          style: TextStyle(
+                            fontSize: 12,
+                            color: colorScheme.primary,
+                            fontWeight: FontWeight.w500,
+                          ),
+                        ),
+                      ),
+                    const SizedBox(height: 8),
+                    _buildStatusBadge(recipe.status),
+                  ],
+                ),
               ),
 
-              // ==================================================
-              // DESCRIPTION
-              // ==================================================
-
-              if (recipe.description != null &&
-                  recipe.description!.trim().isNotEmpty) ...[
-                const SizedBox(height: 12),
-
-                Text(
-                  recipe.description!,
-
-                  maxLines: 2,
-                  overflow: TextOverflow.ellipsis,
-
-                  style: TextStyle(
-                    color: Theme.of(context)
-                        .colorScheme
-                        .onSurfaceVariant,
-                  ),
-                ),
-              ],
-
-              const SizedBox(height: 8),
-
-              // ==================================================
-              // INDICATION CLIQUABLE
-              // ==================================================
-
-              Row(
-                mainAxisAlignment: MainAxisAlignment.end,
-                children: [
-                  Text(
-                    'Voir les détails',
-                    style: TextStyle(
-                      color: Theme.of(context)
-                          .colorScheme
-                          .primary,
-                      fontWeight: FontWeight.w500,
-                    ),
-                  ),
-
-                  const SizedBox(width: 4),
-
-                  Icon(
-                    Icons.arrow_forward_ios,
-                    size: 14,
-                    color: Theme.of(context)
-                        .colorScheme
-                        .primary,
-                  ),
-                ],
+              Icon(
+                Icons.chevron_right,
+                color: colorScheme.onSurfaceVariant,
               ),
             ],
           ),
@@ -367,67 +337,55 @@ class _MyRecipesPageState extends State<MyRecipesPage> {
 
   Widget _buildStatusBadge(String? status) {
     String label;
-
     IconData icon;
+    Color color;
 
     switch (status) {
       case 'published':
         label = 'Publiée';
         icon = Icons.check_circle_outline;
+        color = const Color(0xFF3B6D11);
         break;
-
       case 'draft':
         label = 'Brouillon';
         icon = Icons.edit_outlined;
+        color = const Color(0xFFE8A63C);
         break;
-
       case 'archived':
         label = 'Archivée';
         icon = Icons.archive_outlined;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
         break;
-
       default:
         label = 'Inconnue';
         icon = Icons.help_outline;
+        color = Theme.of(context).colorScheme.onSurfaceVariant;
     }
 
     return Container(
-      padding: const EdgeInsets.symmetric(
-        horizontal: 10,
-        vertical: 6,
-      ),
-
+      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
       decoration: BoxDecoration(
-        color: Theme.of(context)
-            .colorScheme
-            .surfaceContainerHighest,
-
+        color: color.withValues(alpha: 0.12),
         borderRadius: BorderRadius.circular(20),
       ),
-
       child: Row(
         mainAxisSize: MainAxisSize.min,
-
         children: [
-          Icon(
-            icon,
-            size: 16,
-          ),
-
-          const SizedBox(width: 6),
-
+          Icon(icon, size: 13, color: color),
+          const SizedBox(width: 5),
           Text(
             label,
-
-            style: const TextStyle(
-              fontSize: 13,
-              fontWeight: FontWeight.w500,
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w700,
+              color: color,
             ),
           ),
         ],
       ),
     );
   }
+
 
   // ============================================================
   // ÉTAT VIDE
@@ -566,17 +524,5 @@ class _MyRecipesPageState extends State<MyRecipesPage> {
         ),
       ),
     );
-  }
-
-  // ============================================================
-  // FORMATAGE DE LA DATE
-  // ============================================================
-
-  String _formatDate(DateTime date) {
-    final day = date.day.toString().padLeft(2, '0');
-    final month = date.month.toString().padLeft(2, '0');
-    final year = date.year.toString();
-
-    return '$day/$month/$year';
   }
 }

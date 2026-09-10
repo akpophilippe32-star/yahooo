@@ -507,22 +507,15 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Text(
-                  'Créer une recette',
+                Text(
+                  'Renseigne les informations principales '
+                  'de ta recette.',
                   style: TextStyle(
-                    fontSize: 28,
-                    fontWeight: FontWeight.bold,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
                 ),
 
-                const SizedBox(height: 8),
-
-                const Text(
-                  'Renseigne les informations principales '
-                  'de ta recette.',
-                ),
-
-                const SizedBox(height: 32),
+                const SizedBox(height: 28),
 
                 // ========================================================
                 // TITRE
@@ -568,71 +561,100 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                 // IMAGE DE LA RECETTE
                 // ========================================================
 
-                const Text(
-                  'Image de la recette',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.image_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Image de la recette',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 12),
 
-                Container(
-                  height: 220,
-                  decoration: BoxDecoration(
-                    border: Border.all(
-                      color: Theme.of(context).colorScheme.outline,
+                Stack(
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(16),
+                      child: Container(
+                        height: 200,
+                        width: double.infinity,
+                        color: Theme.of(context)
+                            .colorScheme
+                            .surfaceContainerHighest,
+                        child: _selectedImageBytes != null
+                            ? Image.memory(
+                                _selectedImageBytes!,
+                                width: double.infinity,
+                                fit: BoxFit.cover,
+                              )
+                            : Column(
+                                mainAxisAlignment:
+                                    MainAxisAlignment.center,
+                                children: [
+                                  Icon(
+                                    Icons.add_photo_alternate_outlined,
+                                    size: 36,
+                                    color: Theme.of(context)
+                                        .colorScheme
+                                        .onSurfaceVariant,
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    'Aucune image sélectionnée',
+                                    style: TextStyle(
+                                      fontSize: 12,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                      ),
                     ),
-                    borderRadius: BorderRadius.circular(12),
-                  ),
-                  clipBehavior: Clip.antiAlias,
-                  child: _selectedImageBytes != null
-                      ? Image.memory(
-                          _selectedImageBytes!,
-                          width: double.infinity,
-                          fit: BoxFit.cover,
-                        )
-                      : const Center(
-                          child: Text(
-                            'Aucune image sélectionnée.',
+                    Positioned(
+                      right: 10,
+                      bottom: 10,
+                      child: Row(
+                        children: [
+                          if (_selectedImage != null)
+                            Padding(
+                              padding: const EdgeInsets.only(right: 8),
+                              child: _ImageActionButton(
+                                icon: Icons.delete_outline,
+                                onTap: _isLoading
+                                    ? null
+                                    : () {
+                                        setState(() {
+                                          _selectedImage = null;
+                                          _selectedImageBytes = null;
+                                        });
+                                      },
+                              ),
+                            ),
+                          _ImageActionButton(
+                            icon: _selectedImage == null
+                                ? Icons.add_a_photo_outlined
+                                : Icons.edit_outlined,
+                            onTap: _isLoading ? null : _pickImage,
                           ),
-                        ),
+                        ],
+                      ),
+                    ),
+                  ],
                 ),
 
-                const SizedBox(height: 12),
-
-                OutlinedButton.icon(
-                  onPressed: _isLoading ? null : _pickImage,
-                  icon: const Icon(
-                    Icons.photo_library_outlined,
-                  ),
-                  label: Text(
-                    _selectedImage == null
-                        ? 'Choisir une image'
-                        : 'Changer l’image',
-                  ),
-                ),
-
-                if (_selectedImage != null)
-                  OutlinedButton.icon(
-                    onPressed: _isLoading
-                        ? null
-                        : () {
-                            setState(() {
-                              _selectedImage = null;
-                              _selectedImageBytes = null;
-                            });
-                          },
-                    icon: const Icon(
-                      Icons.delete_outline,
-                    ),
-                    label: const Text(
-                      'Retirer l’image',
-                    ),
-                  ),
-
-                const SizedBox(height: 20),
+                const SizedBox(height: 24),
 
                 // ========================================================
                 // CATÉGORIE
@@ -748,33 +770,40 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                 // DIFFICULTÉ
                 // ========================================================
 
-                DropdownButtonFormField<String>(
-                  initialValue: _selectedDifficulty,
-                  decoration: const InputDecoration(
-                    labelText: 'Difficulté',
-                    border: OutlineInputBorder(),
+                Text(
+                  'Difficulté',
+                  style: TextStyle(
+                    fontSize: 12,
+                    fontWeight: FontWeight.w600,
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
                   ),
-                  items: _difficulties.map((difficulty) {
-                    return DropdownMenuItem<String>(
-                      value: difficulty,
-                      child: Text(
-                        _difficultyLabel(difficulty),
-                      ),
+                ),
+                const SizedBox(height: 8),
+                Wrap(
+                  spacing: 8,
+                  children: _difficulties.map((difficulty) {
+                    final isSelected = _selectedDifficulty == difficulty;
+
+                    return ChoiceChip(
+                      label: Text(_difficultyLabel(difficulty)),
+                      selected: isSelected,
+                      onSelected: (_) {
+                        setState(() => _selectedDifficulty = difficulty);
+                      },
                     );
                   }).toList(),
-                  onChanged: (value) {
-                    setState(() {
-                      _selectedDifficulty = value;
-                    });
-                  },
-                  validator: (value) {
-                    if (value == null) {
-                      return 'Sélectionne une difficulté.';
-                    }
-
-                    return null;
-                  },
                 ),
+                if (_selectedDifficulty == null)
+                  Padding(
+                    padding: const EdgeInsets.only(top: 6, left: 4),
+                    child: Text(
+                      'Sélectionne une difficulté.',
+                      style: TextStyle(
+                        fontSize: 12,
+                        color: Theme.of(context).colorScheme.error,
+                      ),
+                    ),
+                  ),
 
                 const SizedBox(height: 20),
 
@@ -896,19 +925,22 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                 // SECTION INGRÉDIENTS
                 // ========================================================
 
-                const Text(
-                  'Ingrédients',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
-                ),
-
-                const SizedBox(height: 8),
-
-                const Text(
-                  'Ajoute les ingrédients nécessaires '
-                  'à ta recette.',
+                Row(
+                  children: [
+                    Icon(
+                      Icons.shopping_basket_outlined,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Ingrédients',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
 
                 const SizedBox(height: 16),
@@ -1113,41 +1145,60 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                             ingredient.ingredientId,
                           );
 
-                          return Card(
-                            margin:
-                                const EdgeInsets.only(
-                              bottom: 10,
+                          return Container(
+                            margin: const EdgeInsets.only(bottom: 10),
+                            padding: const EdgeInsets.all(12),
+                            decoration: BoxDecoration(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
+                              borderRadius: BorderRadius.circular(14),
                             ),
-                            child: ListTile(
-                              leading: const CircleAvatar(
-                                child: Icon(
-                                  Icons.restaurant,
+                            child: Row(
+                              children: [
+                                CircleAvatar(
+                                  backgroundColor:
+                                      Theme.of(context).colorScheme.surface,
+                                  child: Icon(
+                                    Icons.restaurant,
+                                    size: 18,
+                                    color:
+                                        Theme.of(context).colorScheme.primary,
+                                  ),
                                 ),
-                              ),
-                              title: Text(
-                                ingredientName,
-                                style: const TextStyle(
-                                  fontWeight:
-                                      FontWeight.bold,
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        ingredientName,
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                        ),
+                                      ),
+                                      Text(
+                                        _formatIngredientDetails(ingredient),
+                                        style: TextStyle(
+                                          fontSize: 12,
+                                          color: Theme.of(context)
+                                              .colorScheme
+                                              .onSurfaceVariant,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                              subtitle: Text(
-                                _formatIngredientDetails(
-                                  ingredient,
+                                IconButton(
+                                  onPressed: () => _removeIngredient(index),
+                                  tooltip: 'Supprimer',
+                                  icon: const Icon(
+                                    Icons.close,
+                                    size: 18,
+                                  ),
                                 ),
-                              ),
-                              trailing: IconButton(
-                                onPressed: () {
-                                  _removeIngredient(
-                                    index,
-                                  );
-                                },
-                                tooltip: 'Supprimer',
-                                icon: const Icon(
-                                  Icons
-                                      .delete_outline,
-                                ),
-                              ),
+                              ],
                             ),
                           );
                         }),
@@ -1162,22 +1213,25 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                 // ÉTAPES DE PRÉPARATION
                 // ========================================================
 
-                const Text(
-                  'Étapes de préparation',
-                  style: TextStyle(
-                    fontSize: 22,
-                    fontWeight: FontWeight.bold,
-                  ),
+                Row(
+                  children: [
+                    Icon(
+                      Icons.format_list_numbered,
+                      size: 18,
+                      color: Theme.of(context).colorScheme.primary,
+                    ),
+                    const SizedBox(width: 8),
+                    const Text(
+                      'Étapes de préparation',
+                      style: TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
+                    ),
+                  ],
                 ),
 
-                const SizedBox(height: 8),
-
-                const Text(
-                  'Décris les différentes étapes nécessaires '
-                  'pour réaliser ta recette.',
-                ),
-
-                const SizedBox(height: 16),
+                const SizedBox(height: 16),                const SizedBox(height: 16),
 
                 TextFormField(
                   controller: _stepController,
@@ -1219,29 +1273,47 @@ class _CreateRecipePageState extends State<CreateRecipePage> {
                   final index = entry.key;
                   final step = entry.value;
 
-                  return Card(
+                  return Container(
                     margin: const EdgeInsets.only(bottom: 10),
-                    child: ListTile(
-                      leading: CircleAvatar(
-                        child: Text(
-                          '${index + 1}',
+                    padding: const EdgeInsets.all(12),
+                    decoration: BoxDecoration(
+                      color:
+                          Theme.of(context).colorScheme.surfaceContainerHighest,
+                      borderRadius: BorderRadius.circular(14),
+                    ),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        CircleAvatar(
+                          radius: 14,
+                          backgroundColor: Theme.of(context).colorScheme.primary,
+                          child: Text(
+                            '${index + 1}',
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontSize: 12,
+                              fontWeight: FontWeight.w700,
+                            ),
+                          ),
                         ),
-                      ),
-                      title: Text(
-                        step.instruction,
-                        style: const TextStyle(
-                          fontWeight: FontWeight.w500,
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Padding(
+                            padding: const EdgeInsets.only(top: 4),
+                            child: Text(
+                              step.instruction,
+                              style: const TextStyle(
+                                fontWeight: FontWeight.w500,
+                              ),
+                            ),
+                          ),
                         ),
-                      ),
-                      trailing: IconButton(
-                        onPressed: () {
-                          _removeStep(index);
-                        },
-                        tooltip: 'Supprimer',
-                        icon: const Icon(
-                          Icons.delete_outline,
+                        IconButton(
+                          onPressed: () => _removeStep(index),
+                          tooltip: 'Supprimer',
+                          icon: const Icon(Icons.close, size: 18),
                         ),
-                      ),
+                      ],
                     ),
                   );
                 }),
@@ -1451,5 +1523,32 @@ class RecipeIngredientDraft {
         'unit: $unit, '
         'optional: $optional'
         ')';
+  }
+}
+// ============================================================
+// BOUTON D'ACTION SUR L'IMAGE (changer / retirer)
+// ============================================================
+
+class _ImageActionButton extends StatelessWidget {
+  final IconData icon;
+  final VoidCallback? onTap;
+
+  const _ImageActionButton({required this.icon, required this.onTap});
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      customBorder: const CircleBorder(),
+      child: Container(
+        width: 38,
+        height: 38,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          color: Colors.black.withValues(alpha: 0.55),
+        ),
+        child: Icon(icon, size: 18, color: Colors.white),
+      ),
+    );
   }
 }

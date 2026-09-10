@@ -54,6 +54,7 @@ class MealPlanRepository {
           recipes (
             id,
             title,
+            author_id,
             image_url,
             video_url,
             source_type,

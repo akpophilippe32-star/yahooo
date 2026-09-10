@@ -1,45 +1,128 @@
+# ============================================================
+# MEALORA - Flutter / Dart / Android / iOS
+# ============================================================
+
+# -------------------------
+# Environment / Secrets
+# -------------------------
+.env
+.env.*
+!.env.example
+
+# Supabase / API secrets
+*.key
+*.pem
+*.p12
+*.pfx
+*.jks
+*.keystore
+google-services.json
+
+# Local configuration
+local.properties
+
+# -------------------------
 # Miscellaneous
+# -------------------------
 *.class
 *.log
 *.pyc
 *.swp
+*.swo
 .DS_Store
+Thumbs.db
+
 .atom/
 .build/
 .buildlog/
-.history
+.history/
 .svn/
 .swiftpm/
 migrate_working_dir/
 
-# IntelliJ related
+# -------------------------
+# IntelliJ / Android Studio
+# -------------------------
 *.iml
 *.ipr
 *.iws
 .idea/
 
-# The .vscode folder contains launch configuration and tasks you configure in
-# VS Code which you may wish to be included in version control, so this line
-# is commented out by default.
-#.vscode/
+# -------------------------
+# VS Code
+# -------------------------
+# On peut garder les configurations utiles du projet
+# .vscode/
 
-# Flutter/Dart/Pub related
-**/doc/api/
-**/ios/Flutter/.last_build_id
+# -------------------------
+# Flutter / Dart / Pub
+# -------------------------
 .dart_tool/
+.flutter-plugins
 .flutter-plugins-dependencies
 .pub-cache/
 .pub/
+.packages
+
+# Flutter generated files
 /build/
 /coverage/
 
-# Symbolication related
-app.*.symbols
+# Generated documentation
+**/doc/api/
 
-# Obfuscation related
-app.*.map.json
+# -------------------------
+# Flutter iOS
+# -------------------------
+**/ios/Flutter/.last_build_id
+**/ios/Flutter/ephemeral/
+**/ios/Pods/
+**/ios/.symlinks/
 
-# Android Studio will place build artifacts here
+# -------------------------
+# Android generated files
+# -------------------------
+/android/.gradle/
+/android/local.properties
 /android/app/debug
 /android/app/profile
 /android/app/release
+
+# Android generated build
+/android/app/build/
+/android/build/
+
+# -------------------------
+# Gradle
+# -------------------------
+.gradle/
+**/.gradle/
+
+# -------------------------
+# Xcode
+# -------------------------
+**/xcuserdata/
+**/*.xcuserdatad/
+**/*.xcuserstate
+
+# -------------------------
+# Symbolication
+# -------------------------
+app.*.symbols
+app.*.map.json
+
+# -------------------------
+# Build outputs
+# -------------------------
+*.apk
+*.aab
+*.ipa
+
+# -------------------------
+# Temporary files
+# -------------------------
+*.tmp
+*.temp
+*.bak
+*.orig
+*~

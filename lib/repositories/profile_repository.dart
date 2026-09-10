@@ -27,6 +27,19 @@ class ProfileRepository {
     return Map<String, dynamic>.from(response);
   }
 
+  /// Récupère le profil d'un utilisateur quelconque par son id —
+  /// utilisé pour afficher le profil du créateur d'une recette (pas
+  /// forcément l'utilisateur connecté).
+  Future<Map<String, dynamic>> getProfileById(String userId) async {
+    final response = await _supabase
+        .from('profiles')
+        .select()
+        .eq('id', userId)
+        .single();
+
+    return Map<String, dynamic>.from(response);
+  }
+
   // ============================================================
   // PHOTO DE PROFIL
   // ============================================================
@@ -122,4 +135,60 @@ class ProfileRepository {
   // Déjà géré par AuthRepository.updateProfilePreferences —
   // conservé là-bas pour ne pas dupliquer, réutilisé depuis
   // ProfilePage directement via AuthRepository.
+
+  // ============================================================
+  // ABONNEMENT AUX CRÉATEURS (base du futur système de
+  // notifications — ex. "X a publié une nouvelle recette")
+  // ============================================================
+
+  Future<bool> isFollowing(String creatorId) async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null) return false;
+
+    final existing = await _supabase
+        .from('creator_follows')
+        .select('id')
+        .eq('follower_id', user.id)
+        .eq('creator_id', creatorId)
+        .maybeSingle();
+
+    return existing != null;
+  }
+
+  Future<int> getFollowerCount(String creatorId) async {
+    final response = await _supabase
+        .from('creator_follows')
+        .select('id')
+        .eq('creator_id', creatorId);
+
+    return (response as List).length;
+  }
+
+  /// Bascule l'abonnement (suit si pas encore abonné, se désabonne
+  /// sinon). Retourne le nouvel état (true = maintenant abonné).
+  Future<bool> toggleFollow(String creatorId) async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('Utilisateur non connecté.');
+    }
+
+    final alreadyFollowing = await isFollowing(creatorId);
+
+    if (alreadyFollowing) {
+      await _supabase
+          .from('creator_follows')
+          .delete()
+          .eq('follower_id', user.id)
+          .eq('creator_id', creatorId);
+      return false;
+    } else {
+      await _supabase.from('creator_follows').insert({
+        'follower_id': user.id,
+        'creator_id': creatorId,
+      });
+      return true;
+    }
+  }
 }

@@ -1,12 +1,13 @@
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
-import 'theme/app_theme.dart';
 import 'app_drawer.dart';
 import '../features/home/home_page.dart';
 import '../features/recipes/presentation/search_page.dart';
 import '../features/planner/presentation/meal_plan_page.dart';
 import '../features/shopping/presentation/shopping_list_page.dart';
+import '../features/notifications/presentation/notifications_page.dart';
+import '../repositories/notification_repository.dart';
 
 /// Coquille persistante de l'application : Drawer, en-tête, bouton
 /// "+" et navigation du bas restent toujours visibles, seul le
@@ -40,6 +41,10 @@ class _AppShellPageState extends State<AppShellPage> {
   String? _userRole;
   bool _isLoadingRole = true;
 
+  final NotificationRepository _notificationRepository =
+      NotificationRepository();
+  int _unreadNotificationCount = 0;
+
   bool get _isCreator =>
       !_isLoadingRole && (_userRole == 'creator' || _userRole == 'admin');
 
@@ -58,6 +63,27 @@ class _AppShellPageState extends State<AppShellPage> {
     ];
 
     _loadUserRole();
+    _loadUnreadNotificationCount();
+  }
+
+  Future<void> _loadUnreadNotificationCount() async {
+    try {
+      final count = await _notificationRepository.getUnreadCount();
+
+      if (!mounted) return;
+
+      setState(() => _unreadNotificationCount = count);
+    } catch (_) {
+      // Pas bloquant : le badge reste juste à 0 en cas d'échec.
+    }
+  }
+
+  Future<void> _openNotifications() async {
+    await Navigator.of(context).pushNamed('/notifications');
+
+    if (!mounted) return;
+
+    await _loadUnreadNotificationCount();
   }
 
   // ============================================================
@@ -127,8 +153,13 @@ class _AppShellPageState extends State<AppShellPage> {
         );
       default: // Accueil
         return IconButton(
-          onPressed: () => _showComingSoon('Les notifications'),
-          icon: const Icon(Icons.notifications_outlined),
+          onPressed: _openNotifications,
+          icon: _unreadNotificationCount > 0
+              ? Badge(
+                  label: Text('$_unreadNotificationCount'),
+                  child: const Icon(Icons.notifications_outlined),
+                )
+              : const Icon(Icons.notifications_outlined),
         );
     }
   }
@@ -271,17 +302,47 @@ class _AppShellPageState extends State<AppShellPage> {
         ),
       ),
 
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateMenu,
-        backgroundColor: AppTheme.accentSecondary,
-        foregroundColor: Colors.black,
-        child: const Icon(Icons.add),
+      floatingActionButton: Container(
+        width: 56,
+        height: 56,
+        decoration: BoxDecoration(
+          shape: BoxShape.circle,
+          gradient: LinearGradient(
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+            colors: [
+              Theme.of(context).colorScheme.primary,
+              Theme.of(context).colorScheme.secondary,
+            ],
+          ),
+          boxShadow: [
+            BoxShadow(
+              color: Theme.of(context).colorScheme.primary.withValues(
+                    alpha: 0.4,
+                  ),
+              blurRadius: 14,
+              offset: const Offset(0, 4),
+            ),
+          ],
+        ),
+        child: Material(
+          color: Colors.transparent,
+          shape: const CircleBorder(),
+          child: InkWell(
+            customBorder: const CircleBorder(),
+            onTap: _openCreateMenu,
+            child: const Icon(Icons.add, color: Colors.white, size: 26),
+          ),
+        ),
       ),
       floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
       bottomNavigationBar: BottomAppBar(
+        height: 56,
         shape: const CircularNotchedRectangle(),
-        notchMargin: 8,
+        notchMargin: 6,
+        elevation: 8,
+        padding: const EdgeInsets.symmetric(vertical: 0),
         child: Row(
           mainAxisAlignment: MainAxisAlignment.spaceAround,
           children: [
@@ -317,7 +378,6 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 }
 
-
 // ============================================================
 // ÉLÉMENT DE NAVIGATION DU BAS
 // ============================================================
@@ -337,15 +397,22 @@ class _NavItem extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final color = isActive
-        ? Theme.of(context).colorScheme.primary
-        : Theme.of(context).colorScheme.onSurfaceVariant;
+    final colorScheme = Theme.of(context).colorScheme;
+    final color = isActive ? colorScheme.primary : colorScheme.onSurfaceVariant;
 
     return InkWell(
       onTap: onTap,
       borderRadius: BorderRadius.circular(20),
-      child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 200),
+        curve: Curves.easeOut,
+        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 4),
+        decoration: BoxDecoration(
+          color: isActive
+              ? colorScheme.primary.withValues(alpha: 0.12)
+              : Colors.transparent,
+          borderRadius: BorderRadius.circular(20),
+        ),
         child: Column(
           mainAxisSize: MainAxisSize.min,
           children: [

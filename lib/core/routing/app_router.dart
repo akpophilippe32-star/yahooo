@@ -6,6 +6,7 @@ import '../../features/auth/presentation/profile_page.dart';
 import '../../features/auth/presentation/my_profile_view_page.dart';
 import '../../features/recipes/presentation/favorites_page.dart';
 import '../../features/auth/presentation/edit_profile_page.dart';
+import '../../features/notifications/presentation/notifications_page.dart';
 import '../app_shell.dart';
 import '../../features/auth/presentation/welcome_page.dart';
 import '../../features/recipes/presentation/create_recipe_page.dart';
@@ -61,6 +62,10 @@ class AppRouter {
         case '/edit-profile':
         return MaterialPageRoute(
           builder: (_) => const EditProfilePage(),
+        );
+        case '/notifications':
+        return MaterialPageRoute(
+          builder: (_) => const NotificationsPage(),
         );
       default:
         return MaterialPageRoute(

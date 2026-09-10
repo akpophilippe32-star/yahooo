@@ -17,6 +17,7 @@ class RecipeRepository {
         .select('''
           id,
           title,
+          author_id,
           description,
           image_url,
           prep_time,
@@ -77,6 +78,7 @@ class RecipeRepository {
         .select('''
           id,
           title,
+          author_id,
           description,
           image_url,
           prep_time,
@@ -137,6 +139,7 @@ class RecipeRepository {
         .select('''
           id,
           title,
+          author_id,
           description,
           image_url,
           video_url,
@@ -161,6 +164,62 @@ class RecipeRepository {
           )
         ''')
         .eq('author_id', user.id)
+        .eq('status', 'published')
+        .order('published_at', ascending: false);
+
+    return (response as List).map((recipe) {
+      final data = Map<String, dynamic>.from(recipe);
+
+      final category = data['categories'];
+
+      if (category is Map<String, dynamic>) {
+        data['category_name'] = category['name'];
+      } else {
+        data['category_name'] = null;
+      }
+
+      data.remove('categories');
+
+      return RecipeModel.fromMap(data);
+    }).toList();
+  }
+
+  /// Recettes publiées d'un créateur quelconque (pas forcément
+  /// l'utilisateur connecté) — utilisé pour la page de profil
+  /// public d'un créateur, consultée par n'importe quel visiteur.
+  Future<List<RecipeModel>> getPublishedRecipesByAuthor(
+    String authorId,
+  ) async {
+    final response = await _supabase
+        .from('recipes')
+        .select('''
+          id,
+          title,
+          author_id,
+          description,
+          image_url,
+          video_url,
+          source_type,
+          prep_time,
+          cook_time,
+          servings,
+          difficulty,
+          diet_type,
+          instructions,
+          calories_kcal,
+          carbs_g,
+          fat_g,
+          protein_g,
+          category_id,
+          status,
+          created_at,
+          updated_at,
+          published_at,
+          categories (
+            name
+          )
+        ''')
+        .eq('author_id', authorId)
         .eq('status', 'published')
         .order('published_at', ascending: false);
 
@@ -226,6 +285,7 @@ class RecipeRepository {
         .select('''
           id,
           title,
+          author_id,
           description,
           image_url,
           video_url,
@@ -381,6 +441,7 @@ class RecipeRepository {
         .select('''
           id,
           title,
+          author_id,
           description,
           image_url,
           prep_time,
@@ -1545,7 +1606,55 @@ class RecipeRepository {
     return existing != null;
   }
 
-  /// Recettes que l'utilisateur connecté a likées ("Mes favoris").
+  /// Récupère une recette publiée par son id (utilisé notamment
+  /// pour ouvrir la fiche recette depuis une notification).
+  Future<RecipeModel?> getRecipeById(int id) async {
+    final response = await _supabase
+        .from('recipes')
+        .select('''
+          id,
+          title,
+          author_id,
+          description,
+          image_url,
+          video_url,
+          source_type,
+          prep_time,
+          cook_time,
+          servings,
+          difficulty,
+          diet_type,
+          instructions,
+          calories_kcal,
+          carbs_g,
+          fat_g,
+          protein_g,
+          category_id,
+          status,
+          created_at,
+          updated_at,
+          published_at,
+          categories (
+            name
+          )
+        ''')
+        .eq('id', id)
+        .eq('status', 'published')
+        .maybeSingle();
+
+    if (response == null) return null;
+
+    final data = Map<String, dynamic>.from(response);
+    final category = data['categories'];
+
+    data['category_name'] =
+        category is Map<String, dynamic> ? category['name'] : null;
+    data.remove('categories');
+
+    return RecipeModel.fromMap(data);
+  }
+
+
   Future<List<RecipeModel>> getMyLikedRecipes() async {
     final user = _supabase.auth.currentUser;
 
@@ -1560,6 +1669,7 @@ class RecipeRepository {
           recipes (
             id,
             title,
+            author_id,
             description,
             image_url,
             video_url,

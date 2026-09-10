@@ -4,8 +4,10 @@ import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/recipe_repository.dart';
 import '../../../repositories/meal_plan_repository.dart';
+import '../../../repositories/profile_repository.dart';
 import '../../../widgets/recipe_video_player.dart';
 import 'cooking_mode_page.dart';
+import 'creator_profile_page.dart';
 
 /// Écran de vue publique d'une recette publiée : photo/vidéo en
 /// tête avec like, actions rapides (planifier / cuisiner / courses),
@@ -27,6 +29,7 @@ class RecipePublicViewPage extends StatefulWidget {
 
 class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   final RecipeRepository _recipeRepository = RecipeRepository();
+  final ProfileRepository _profileRepository = ProfileRepository();
   final MealPlanRepository _mealPlanRepository = MealPlanRepository();
 
   late Future<Map<String, dynamic>> _detailsFuture;
@@ -45,6 +48,8 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmittingComment = false;
 
+  String? _authorName;
+
   @override
   void initState() {
     super.initState();
@@ -54,6 +59,31 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
 
     _loadLikeState();
     _loadRatingState();
+    _loadAuthorName();
+  }
+
+  Future<void> _loadAuthorName() async {
+    final authorId = widget.recipe.authorId;
+    if (authorId == null) return;
+
+    try {
+      final profile = await _profileRepository.getProfileById(authorId);
+
+      if (!mounted) return;
+
+      final username = profile['username']?.toString();
+      final fullName = profile['full_name']?.toString();
+
+      setState(() {
+        _authorName = (fullName != null && fullName.trim().isNotEmpty)
+            ? fullName
+            : (username != null && username.trim().isNotEmpty)
+                ? '@$username'
+                : null;
+      });
+    } catch (_) {
+      // Reste sur le libellé par défaut ("Profil") en cas d'échec.
+    }
   }
 
   @override
@@ -718,6 +748,20 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     return Row(
       mainAxisAlignment: MainAxisAlignment.spaceEvenly,
       children: [
+        if (widget.recipe.authorId != null)
+          _QuickAction(
+            icon: Icons.person_outline,
+            label: _authorName ?? 'Profil',
+            onTap: () {
+              Navigator.of(context).push(
+                MaterialPageRoute(
+                  builder: (context) => CreatorProfilePage(
+                    authorId: widget.recipe.authorId!,
+                  ),
+                ),
+              );
+            },
+          ),
         _QuickAction(
           icon: Icons.calendar_month_outlined,
           label: 'Planifier',
@@ -1068,7 +1112,16 @@ class _QuickAction extends StatelessWidget {
               ),
             ),
             const SizedBox(height: 4),
-            Text(label, style: const TextStyle(fontSize: 11)),
+            SizedBox(
+              width: 64,
+              child: Text(
+                label,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.center,
+                style: const TextStyle(fontSize: 11),
+              ),
+            ),
           ],
         ),
       ),

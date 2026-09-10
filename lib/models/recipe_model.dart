@@ -15,6 +15,7 @@ class RecipeModel {
   // Informations supplémentaires pour le Creator
   final String? status;
   final DateTime? createdAt;
+  final String? authorId;
 
   // Vidéo (recette créée à partir d'une vidéo importée)
   final String sourceType;
@@ -41,6 +42,7 @@ class RecipeModel {
     this.categoryName,
     this.status,
     this.createdAt,
+    this.authorId,
     this.sourceType = 'manual',
     this.videoUrl,
     this.caloriesKcal,
@@ -64,6 +66,7 @@ class RecipeModel {
       categoryId: map['category_id'] as int?,
       categoryName: map['category_name'] as String?,
       status: map['status'] as String?,
+      authorId: map['author_id'] as String?,
       createdAt: map['created_at'] != null
           ? DateTime.tryParse(
               map['created_at'].toString(),

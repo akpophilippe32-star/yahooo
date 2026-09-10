@@ -1,0 +1,60 @@
+name: Build Mealora APK
+
+on:
+  push:
+    branches:
+      - main
+
+  workflow_dispatch:
+
+jobs:
+  build-apk:
+    name: Build Android APK
+    runs-on: ubuntu-latest
+
+    steps:
+      # 1. Récupérer le projet depuis GitHub
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 2. Installer Flutter
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: '3.44.4'
+          channel: 'stable'
+          cache: true
+
+      # 3. Vérifier l'environnement Flutter
+      - name: Flutter doctor
+        run: flutter doctor -v
+
+      # 4. Installer les dépendances
+      - name: Install dependencies
+        run: flutter pub get
+
+      # 5. Vérifier le code
+      - name: Analyze Flutter project
+        run: flutter analyze
+
+      # 6. Lancer les tests
+      - name: Run tests
+        run: flutter test
+
+      # 7. Construire l'APK Release
+      - name: Build APK
+        run: flutter build apk --release
+
+      # 8. Renommer l'APK
+      - name: Rename APK
+        run: |
+          mkdir -p release
+          cp build/app/outputs/flutter-apk/app-release.apk release/Mealora.apk
+
+      # 9. Publier l'APK comme Artifact GitHub
+      - name: Upload APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: Mealora-APK
+          path: release/Mealora.apk
+          retention-days: 30
