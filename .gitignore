@@ -79,6 +79,7 @@ migrate_working_dir/
 **/ios/Pods/
 **/ios/.symlinks/
 
+
 # -------------------------
 # Android generated files
 # -------------------------
