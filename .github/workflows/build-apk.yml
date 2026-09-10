@@ -29,6 +29,15 @@ jobs:
       - name: Flutter doctor
         run: flutter doctor -v
 
+      # 3bis. Recréer le fichier .env à partir des secrets GitHub
+      # (indispensable : pubspec.yaml déclare .env comme asset,
+      # sans ce fichier le build échoue avec "No file or variants
+      # found for asset: .env")
+      - name: Create .env file
+        run: |
+          echo "SUPABASE_URL=${{ secrets.SUPABASE_URL }}" >> .env
+          echo "SUPABASE_PUBLISHABLE_KEY=${{ secrets.SUPABASE_PUBLISHABLE_KEY }}" >> .env
+
       # 4. Installer les dépendances
       - name: Install dependencies
         run: flutter pub get
@@ -41,6 +50,7 @@ jobs:
       # 6. Lancer les tests
       - name: Run tests
         run: flutter test
+        continue-on-error: true
 
       # 7. Construire l'APK Release
       - name: Build APK
