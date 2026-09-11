@@ -9,6 +9,7 @@ import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/profile_repository.dart';
 import '../../../repositories/recipe_repository.dart';
+import '../data/auth_repository.dart';
 import '../../recipes/presentation/recipe_public_view_page.dart';
 
 const List<String> _kMonthNamesFr = [
@@ -43,13 +44,17 @@ enum _RecipeFilter { images, videos, all }
 class _MyProfileViewPageState extends State<MyProfileViewPage> {
   final _profileRepository = ProfileRepository();
   final _recipeRepository = RecipeRepository();
+  final _authRepository = AuthRepository();
   final _imagePicker = ImagePicker();
 
   late Future<Map<String, dynamic>> _profileFuture;
   late Future<List<RecipeModel>> _recipesFuture;
 
   bool _isUploadingAvatar = false;
+  bool _isSubmittingApplication = false;
   String? _avatarPath;
+  String _role = 'user';
+  String? _creatorStatus;
   _RecipeFilter _filter = _RecipeFilter.all;
 
   @override
@@ -58,12 +63,26 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
     _load();
   }
 
+  bool get _isCreator => _role == 'creator' || _role == 'admin';
+
   void _load() {
-    _profileFuture = _profileRepository.getMyProfile().then((profile) {
-      _avatarPath = profile['avatar_url'] as String?;
-      return profile;
-    });
+    _profileFuture = _profileRepository.getMyProfile();
     _recipesFuture = _recipeRepository.getMyPublishedRecipes();
+
+    // _role/_creatorStatus pilotent l'affichage (grille créateur vs
+    // invitation à devenir créateur) en dehors du FutureBuilder de
+    // l'en-tête : il faut donc bien un setState() ici, sinon la
+    // page reste bloquée sur les valeurs par défaut une fois
+    // chargée (bug précédent).
+    _profileFuture.then((profile) {
+      if (!mounted) return;
+
+      setState(() {
+        _avatarPath = profile['avatar_url'] as String?;
+        _role = profile['role'] as String? ?? 'user';
+        _creatorStatus = profile['creator_status'] as String?;
+      });
+    });
   }
 
   Future<void> _refresh() async {
@@ -174,6 +193,163 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
     );
   }
 
+  // ============================================================
+  // DEMANDE DE STATUT CRÉATEUR (pour les comptes "user" simples)
+  // ============================================================
+
+  Future<void> _showBecomeCreatorSheet() async {
+    String specialty = 'cuisine';
+    final noteController = TextEditingController();
+
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return StatefulBuilder(
+          builder: (sheetContext, setSheetState) {
+            final isNutrition = specialty == 'nutrition';
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(sheetContext).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.stretch,
+                children: [
+                  const Text(
+                    'Devenir créateur',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.w700),
+                  ),
+                  const SizedBox(height: 6),
+                  Text(
+                    'Un administrateur examine chaque demande avant '
+                    'de l’activer.',
+                    style: TextStyle(
+                      fontSize: 12,
+                      color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  Wrap(
+                    spacing: 8,
+                    children: [
+                      ChoiceChip(
+                        label: const Text('Cuisinier·ère'),
+                        selected: specialty == 'cuisine',
+                        onSelected: (_) {
+                          setSheetState(() => specialty = 'cuisine');
+                        },
+                      ),
+                      ChoiceChip(
+                        label: const Text('Nutritionniste'),
+                        selected: specialty == 'nutrition',
+                        onSelected: (_) {
+                          setSheetState(() => specialty = 'nutrition');
+                        },
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 16),
+                  TextField(
+                    controller: noteController,
+                    maxLines: 4,
+                    decoration: InputDecoration(
+                      labelText: isNutrition
+                          ? 'Expérience / qualifications'
+                          : 'Expérience (facultatif)',
+                      hintText: isNutrition
+                          ? 'Ex. diététicien diplômé, 5 ans d’expérience...'
+                          : null,
+                      alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 20),
+                  FilledButton(
+                    onPressed: _isSubmittingApplication
+                        ? null
+                        : () async {
+                            if (isNutrition &&
+                                noteController.text.trim().isEmpty) {
+                              ScaffoldMessenger.of(sheetContext).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Ce champ aide l’admin à valider ta '
+                                    'demande.',
+                                  ),
+                                ),
+                              );
+                              return;
+                            }
+
+                            setState(() => _isSubmittingApplication = true);
+
+                            try {
+                              await _authRepository.submitCreatorApplication(
+                                specialty: specialty,
+                                applicationNote:
+                                    noteController.text.trim().isEmpty
+                                        ? null
+                                        : noteController.text.trim(),
+                              );
+
+                              if (!mounted) return;
+
+                              await _refresh();
+
+                              if (!sheetContext.mounted) return;
+                              Navigator.of(sheetContext).pop();
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                const SnackBar(
+                                  content: Text(
+                                    'Demande envoyée ! En attente de '
+                                    'validation par un administrateur.',
+                                  ),
+                                ),
+                              );
+                            } catch (error) {
+                              if (!mounted) return;
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Text(
+                                    'Impossible d’envoyer la demande : '
+                                    '$error',
+                                  ),
+                                ),
+                              );
+                            } finally {
+                              if (mounted) {
+                                setState(
+                                  () => _isSubmittingApplication = false,
+                                );
+                              }
+                            }
+                          },
+                    child: _isSubmittingApplication
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Text('Envoyer ma demande'),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
   Future<void> _openCreateMenu() async {
     await showModalBottomSheet<void>(
       context: context,
@@ -228,6 +404,60 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
       case _RecipeFilter.all:
         return recipes;
     }
+  }
+
+  // ============================================================
+  // INVITATION À DEVENIR CRÉATEUR (comptes "user")
+  // ============================================================
+
+  Widget _buildBecomeCreatorPrompt(ColorScheme colorScheme) {
+    final isPending = _creatorStatus == 'pending';
+
+    return Container(
+      padding: const EdgeInsets.all(20),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(16),
+      ),
+      child: Column(
+        children: [
+          Icon(
+            isPending ? Icons.hourglass_top_outlined : Icons.storefront_outlined,
+            size: 36,
+            color: isPending ? colorScheme.secondary : colorScheme.primary,
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isPending
+                ? 'Ta demande est en cours d’examen'
+                : 'Tu n’es pas encore créateur',
+            style: const TextStyle(fontSize: 15, fontWeight: FontWeight.w700),
+            textAlign: TextAlign.center,
+          ),
+          const SizedBox(height: 6),
+          Text(
+            isPending
+                ? 'Un administrateur va bientôt valider ta demande. '
+                    'Tu pourras alors publier tes recettes ici.'
+                : 'Deviens créateur pour pouvoir créer et publier '
+                    'tes propres recettes.',
+            textAlign: TextAlign.center,
+            style: TextStyle(
+              fontSize: 12,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          if (!isPending) ...[
+            const SizedBox(height: 16),
+            FilledButton.icon(
+              onPressed: _showBecomeCreatorSheet,
+              icon: const Icon(Icons.add_business_outlined, size: 18),
+              label: const Text('Devenir créateur'),
+            ),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -536,124 +766,132 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
               ),
 
               // ====================================================
-              // ONGLETS : IMAGES / VIDÉOS / TOUS
+              // ONGLETS : IMAGES / VIDÉOS / TOUS (créateurs)
+              // OU INVITATION À DEVENIR CRÉATEUR (comptes "user")
               // ====================================================
 
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
-                sliver: SliverToBoxAdapter(
-                  child: Row(
-                    children: [
-                      _FilterTab(
-                        label: 'Images',
-                        icon: Icons.image_outlined,
-                        isActive: _filter == _RecipeFilter.images,
-                        onTap: () =>
-                            setState(() => _filter = _RecipeFilter.images),
-                      ),
-                      _FilterTab(
-                        label: 'Vidéos',
-                        icon: Icons.videocam_outlined,
-                        isActive: _filter == _RecipeFilter.videos,
-                        onTap: () =>
-                            setState(() => _filter = _RecipeFilter.videos),
-                      ),
-                      _FilterTab(
-                        label: 'Tous',
-                        icon: Icons.grid_view_outlined,
-                        isActive: _filter == _RecipeFilter.all,
-                        onTap: () =>
-                            setState(() => _filter = _RecipeFilter.all),
-                      ),
-                    ],
+              if (_isCreator) ...[
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 8),
+                  sliver: SliverToBoxAdapter(
+                    child: Row(
+                      children: [
+                        _FilterTab(
+                          label: 'Images',
+                          icon: Icons.image_outlined,
+                          isActive: _filter == _RecipeFilter.images,
+                          onTap: () =>
+                              setState(() => _filter = _RecipeFilter.images),
+                        ),
+                        _FilterTab(
+                          label: 'Vidéos',
+                          icon: Icons.videocam_outlined,
+                          isActive: _filter == _RecipeFilter.videos,
+                          onTap: () =>
+                              setState(() => _filter = _RecipeFilter.videos),
+                        ),
+                        _FilterTab(
+                          label: 'Tous',
+                          icon: Icons.grid_view_outlined,
+                          isActive: _filter == _RecipeFilter.all,
+                          onTap: () =>
+                              setState(() => _filter = _RecipeFilter.all),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
-              ),
 
-              const SliverPadding(
-                padding: EdgeInsets.symmetric(horizontal: 20),
-                sliver: SliverToBoxAdapter(child: Divider(height: 1)),
-              ),
+                const SliverPadding(
+                  padding: EdgeInsets.symmetric(horizontal: 20),
+                  sliver: SliverToBoxAdapter(child: Divider(height: 1)),
+                ),
 
-              // ====================================================
-              // GRILLE DE RECETTES (filtrée)
-              // ====================================================
-
-              SliverPadding(
-                padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
-                sliver: FutureBuilder<List<RecipeModel>>(
-                  future: _recipesFuture,
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const SliverToBoxAdapter(
-                        child: Padding(
-                          padding: EdgeInsets.all(30),
-                          child: Center(child: CircularProgressIndicator()),
-                        ),
-                      );
-                    }
-
-                    if (snapshot.hasError) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.all(24),
-                          child: Text(
-                            'Impossible de charger les recettes : '
-                            '${snapshot.error}',
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  sliver: FutureBuilder<List<RecipeModel>>(
+                    future: _recipesFuture,
+                    builder: (context, snapshot) {
+                      if (snapshot.connectionState ==
+                          ConnectionState.waiting) {
+                        return const SliverToBoxAdapter(
+                          child: Padding(
+                            padding: EdgeInsets.all(30),
+                            child: Center(child: CircularProgressIndicator()),
                           ),
-                        ),
-                      );
-                    }
+                        );
+                      }
 
-                    final recipes = _applyFilter(snapshot.data ?? []);
-
-                    if (recipes.isEmpty) {
-                      return SliverToBoxAdapter(
-                        child: Padding(
-                          padding: const EdgeInsets.symmetric(vertical: 30),
-                          child: Center(
+                      if (snapshot.hasError) {
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.all(24),
                             child: Text(
-                              'Aucune recette ici pour l’instant.',
-                              style: TextStyle(
-                                color: colorScheme.onSurfaceVariant,
+                              'Impossible de charger les recettes : '
+                              '${snapshot.error}',
+                            ),
+                          ),
+                        );
+                      }
+
+                      final recipes = _applyFilter(snapshot.data ?? []);
+
+                      if (recipes.isEmpty) {
+                        return SliverToBoxAdapter(
+                          child: Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 30),
+                            child: Center(
+                              child: Text(
+                                'Aucune recette ici pour l’instant.',
+                                style: TextStyle(
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                               ),
                             ),
                           ),
+                        );
+                      }
+
+                      return SliverGrid(
+                        gridDelegate:
+                            const SliverGridDelegateWithFixedCrossAxisCount(
+                          crossAxisCount: 2,
+                          mainAxisSpacing: 16,
+                          crossAxisSpacing: 12,
+                          childAspectRatio: 0.78,
+                        ),
+                        delegate: SliverChildBuilderDelegate(
+                          (context, index) {
+                            return _ProfileRecipeCard(
+                              recipe: recipes[index],
+                              recipeRepository: _recipeRepository,
+                            );
+                          },
+                          childCount: recipes.length,
                         ),
                       );
-                    }
-
-                    return SliverGrid(
-                      gridDelegate:
-                          const SliverGridDelegateWithFixedCrossAxisCount(
-                        crossAxisCount: 2,
-                        mainAxisSpacing: 16,
-                        crossAxisSpacing: 12,
-                        childAspectRatio: 0.78,
-                      ),
-                      delegate: SliverChildBuilderDelegate(
-                        (context, index) {
-                          return _ProfileRecipeCard(
-                            recipe: recipes[index],
-                            recipeRepository: _recipeRepository,
-                          );
-                        },
-                        childCount: recipes.length,
-                      ),
-                    );
-                  },
+                    },
+                  ),
                 ),
-              ),
+              ] else
+                SliverPadding(
+                  padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
+                  sliver: SliverToBoxAdapter(
+                    child: _buildBecomeCreatorPrompt(colorScheme),
+                  ),
+                ),
 
               const SliverPadding(padding: EdgeInsets.only(bottom: 90)),
             ],
           ),
         ),
       ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _openCreateMenu,
-        child: const Icon(Icons.add),
-      ),
+      floatingActionButton: _isCreator
+          ? FloatingActionButton(
+              onPressed: _openCreateMenu,
+              child: const Icon(Icons.add),
+            )
+          : null,
     );
   }
 }

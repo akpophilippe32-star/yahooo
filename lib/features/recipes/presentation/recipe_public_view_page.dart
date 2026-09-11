@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
@@ -6,6 +7,7 @@ import '../../../repositories/recipe_repository.dart';
 import '../../../repositories/meal_plan_repository.dart';
 import '../../../repositories/profile_repository.dart';
 import '../../../widgets/recipe_video_player.dart';
+import '../../auth/presentation/my_profile_view_page.dart';
 import 'cooking_mode_page.dart';
 import 'creator_profile_page.dart';
 
@@ -753,11 +755,17 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             icon: Icons.person_outline,
             label: _authorName ?? 'Profil',
             onTap: () {
+              final currentUserId =
+                  Supabase.instance.client.auth.currentUser?.id;
+              final isOwnRecipe = currentUserId == widget.recipe.authorId;
+
               Navigator.of(context).push(
                 MaterialPageRoute(
-                  builder: (context) => CreatorProfilePage(
-                    authorId: widget.recipe.authorId!,
-                  ),
+                  builder: (context) => isOwnRecipe
+                      ? const MyProfileViewPage()
+                      : CreatorProfilePage(
+                          authorId: widget.recipe.authorId!,
+                        ),
                 ),
               );
             },

@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_bar_leading.dart';
 import '../../../core/app_drawer.dart';
@@ -314,27 +315,29 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
                           ],
                         ),
                         const SizedBox(height: 14),
-                        SizedBox(
-                          width: double.infinity,
-                          child: _isFollowing
-                              ? OutlinedButton.icon(
-                                  onPressed: _isFollowLoading
-                                      ? null
-                                      : _toggleFollow,
-                                  icon: const Icon(Icons.check, size: 16),
-                                  label: const Text('Abonné'),
-                                )
-                              : FilledButton.icon(
-                                  onPressed: _isFollowLoading
-                                      ? null
-                                      : _toggleFollow,
-                                  icon: const Icon(
-                                    Icons.person_add_alt_1,
-                                    size: 16,
+                        if (widget.authorId !=
+                            Supabase.instance.client.auth.currentUser?.id)
+                          SizedBox(
+                            width: double.infinity,
+                            child: _isFollowing
+                                ? OutlinedButton.icon(
+                                    onPressed: _isFollowLoading
+                                        ? null
+                                        : _toggleFollow,
+                                    icon: const Icon(Icons.check, size: 16),
+                                    label: const Text('Abonné'),
+                                  )
+                                : FilledButton.icon(
+                                    onPressed: _isFollowLoading
+                                        ? null
+                                        : _toggleFollow,
+                                    icon: const Icon(
+                                      Icons.person_add_alt_1,
+                                      size: 16,
+                                    ),
+                                    label: const Text('Suivre'),
                                   ),
-                                  label: const Text('Suivre'),
-                                ),
-                        ),
+                          ),
                       ],
                     );
                   },
