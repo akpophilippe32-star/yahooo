@@ -4,6 +4,7 @@ import '../core/theme/app_theme.dart';
 import '../models/recipe_model.dart';
 import '../repositories/recipe_repository.dart';
 import '../features/recipes/presentation/recipe_public_view_page.dart';
+import 'recipe_video_thumbnail.dart';
 
 /// Carte de recette réutilisable (grille 2 colonnes) : image ou
 /// icône vidéo, titre en surimpression, cœur de like cliquable en
@@ -101,39 +102,41 @@ class _RecipeGridCardState extends State<RecipeGridCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  FutureBuilder<String?>(
-                    future: recipe.sourceType == 'video'
-                        ? widget.recipeRepository
-                            .getRecipeVideoUrl(recipe.videoUrl)
-                        : widget.recipeRepository
-                            .getRecipeImageUrl(recipe.imageUrl),
-                    builder: (context, snapshot) {
-                      final hasImage = recipe.sourceType != 'video' &&
-                          snapshot.data != null;
+                  recipe.sourceType == 'video' &&
+                          recipe.videoUrl != null &&
+                          recipe.videoUrl!.isNotEmpty
+                      ? RecipeVideoThumbnail(
+                          videoPath: recipe.videoUrl!,
+                          recipeRepository: widget.recipeRepository,
+                        )
+                      : FutureBuilder<String?>(
+                          future: widget.recipeRepository
+                              .getRecipeImageUrl(recipe.imageUrl),
+                          builder: (context, snapshot) {
+                            final hasImage = snapshot.data != null;
 
-                      return Container(
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        child: hasImage
-                            ? Image.network(
-                                snapshot.data!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return const Icon(Icons.restaurant);
-                                },
-                              )
-                            : Icon(
-                                recipe.sourceType == 'video'
-                                    ? Icons.play_circle_outline
-                                    : Icons.restaurant,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
-                      );
-                    },
-                  ),
+                            return Container(
+                              color: Theme.of(context)
+                                  .colorScheme
+                                  .surfaceContainerHighest,
+                              child: hasImage
+                                  ? Image.network(
+                                      snapshot.data!,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return const Icon(Icons.restaurant);
+                                      },
+                                    )
+                                  : Icon(
+                                      Icons.restaurant,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    ),
+                            );
+                          },
+                        ),
                   Positioned(
                     left: 8,
                     right: 8,

@@ -218,87 +218,7 @@ Future<List<Map<String, dynamic>>> _loadSteps() async {
     });
 
     try {
-      String? imageUrl = widget.recipe.imageUrl;
-
-      // ============================================================
-      // NOUVELLE IMAGE
-      // ============================================================
-
-      if (_selectedRecipeImage != null &&
-          _selectedRecipeImageBytes != null) {
-        final user = Supabase.instance.client.auth.currentUser;
-
-        if (user == null) {
-          throw Exception('Utilisateur non connecté.');
-        }
-
-        final extension = _selectedRecipeImage!.name
-            .split('.')
-            .last
-            .toLowerCase();
-
-        final imagePath =
-            '${user.id}/recipe_${widget.recipe.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
-
-        await Supabase.instance.client.storage
-            .from('recipe-images')
-            .uploadBinary(
-              imagePath,
-              _selectedRecipeImageBytes!,
-              fileOptions: const FileOptions(
-                upsert: true,
-              ),
-            );
-
-        imageUrl = imagePath;
-      }
-
-      // ============================================================
-      // SUPPRESSION DE L'IMAGE
-      // ============================================================
-
-      if (_removeRecipeImage) {
-        imageUrl = null;
-      }
-
-      // ============================================================
-      // MISE À JOUR DE LA RECETTE
-      // ============================================================
-
-      await _recipeRepository.updateRecipe(
-        recipeId: widget.recipe.id,
-        title: _titleController.text.trim(),
-        description:
-            _descriptionController.text.trim().isEmpty
-                ? null
-                : _descriptionController.text.trim(),
-        categoryId: _selectedCategoryId,
-        prepTime: int.tryParse(
-          _prepTimeController.text.trim(),
-        ),
-        cookTime: int.tryParse(
-          _cookTimeController.text.trim(),
-        ),
-        servings: int.tryParse(
-          _servingsController.text.trim(),
-        ),
-        difficulty: _selectedDifficulty,
-        dietType:
-            _dietTypeController.text.trim().isEmpty
-                ? null
-                : _dietTypeController.text.trim(),
-        imageUrl: imageUrl,
-        caloriesKcal: int.tryParse(_caloriesController.text.trim()),
-        carbsG: double.tryParse(
-          _carbsController.text.trim().replaceAll(',', '.'),
-        ),
-        fatG: double.tryParse(
-          _fatController.text.trim().replaceAll(',', '.'),
-        ),
-        proteinG: double.tryParse(
-          _proteinController.text.trim().replaceAll(',', '.'),
-        ),
-      );
+      await _persistFormChanges();
 
       if (!mounted) return;
 
@@ -329,20 +249,117 @@ Future<List<Map<String, dynamic>>> _loadSteps() async {
       }
     }
   }
+
+  /// Enregistre l'état actuel du formulaire en base (image, titre,
+  /// catégorie, difficulté, nutrition...) — sans notification ni
+  /// navigation, pour être réutilisable à la fois par "Enregistrer"
+  /// et par "Publier" (qui doit d'abord sauvegarder les derniers
+  /// changements avant de vérifier que rien n'est manquant).
+  Future<void> _persistFormChanges() async {
+    String? imageUrl = widget.recipe.imageUrl;
+
+    // ============================================================
+    // NOUVELLE IMAGE
+    // ============================================================
+
+    if (_selectedRecipeImage != null &&
+        _selectedRecipeImageBytes != null) {
+      final user = Supabase.instance.client.auth.currentUser;
+
+      if (user == null) {
+        throw Exception('Utilisateur non connecté.');
+      }
+
+      final extension = _selectedRecipeImage!.name
+          .split('.')
+          .last
+          .toLowerCase();
+
+      final imagePath =
+          '${user.id}/recipe_${widget.recipe.id}_${DateTime.now().millisecondsSinceEpoch}.$extension';
+
+      await Supabase.instance.client.storage
+          .from('recipe-images')
+          .uploadBinary(
+            imagePath,
+            _selectedRecipeImageBytes!,
+            fileOptions: const FileOptions(
+              upsert: true,
+            ),
+          );
+
+      imageUrl = imagePath;
+    }
+
+    // ============================================================
+    // SUPPRESSION DE L'IMAGE
+    // ============================================================
+
+    if (_removeRecipeImage) {
+      imageUrl = null;
+    }
+
+    // ============================================================
+    // MISE À JOUR DE LA RECETTE
+    // ============================================================
+
+    await _recipeRepository.updateRecipe(
+      recipeId: widget.recipe.id,
+      title: _titleController.text.trim(),
+      description:
+          _descriptionController.text.trim().isEmpty
+              ? null
+              : _descriptionController.text.trim(),
+      categoryId: _selectedCategoryId,
+      prepTime: int.tryParse(
+        _prepTimeController.text.trim(),
+      ),
+      cookTime: int.tryParse(
+        _cookTimeController.text.trim(),
+      ),
+      servings: int.tryParse(
+        _servingsController.text.trim(),
+      ),
+      difficulty: _selectedDifficulty,
+      dietType:
+          _dietTypeController.text.trim().isEmpty
+              ? null
+              : _dietTypeController.text.trim(),
+      imageUrl: imageUrl,
+      caloriesKcal: int.tryParse(_caloriesController.text.trim()),
+      carbsG: double.tryParse(
+        _carbsController.text.trim().replaceAll(',', '.'),
+      ),
+      fatG: double.tryParse(
+        _fatController.text.trim().replaceAll(',', '.'),
+      ),
+      proteinG: double.tryParse(
+        _proteinController.text.trim().replaceAll(',', '.'),
+      ),
+    );
+  }
     // ============================================================
   // PUBLIER LA RECETTE
   // ============================================================
 
   /// Fait passer la recette du statut "draft" à "published".
-  /// Le repository revérifie que les informations obligatoires
-  /// (titre, catégorie, difficulté, ingrédients, étapes) sont bien
-  /// renseignées avant d'autoriser la publication.
+  ///
+  /// Sauvegarde d'abord les derniers changements du formulaire
+  /// (catégorie, difficulté, etc.) — sans ça, la vérification des
+  /// informations obligatoires se basait sur les anciennes valeurs
+  /// encore en base, et refusait à tort de publier en réclamant des
+  /// informations pourtant déjà remplies à l'écran.
   Future<void> _publishRecipe() async {
+    if (!_formKey.currentState!.validate()) {
+      return;
+    }
+
     setState(() {
       _isLoading = true;
     });
 
     try {
+      await _persistFormChanges();
       await _recipeRepository.publishRecipe(widget.recipe.id);
 
       if (!mounted) return;

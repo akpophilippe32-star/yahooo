@@ -7,6 +7,7 @@ import '../../models/recipe_model.dart';
 import '../../repositories/category_repository.dart';
 import '../../repositories/recipe_repository.dart';
 import '../../widgets/recipe_grid_card.dart';
+import '../../widgets/recipe_video_thumbnail.dart';
 import '../recipes/presentation/recipe_public_view_page.dart';
 
 /// Contenu de l'onglet Accueil : catégories + grille des recettes
@@ -261,38 +262,68 @@ class HomeTabViewState extends State<HomeTabView> {
   Widget _buildPromoCarousel(BuildContext context) {
     return FutureBuilder<List<RecipeModel>>(
       future: _recipesFuture,
-      builder: (context, snapshot) {
-        final recipes = (snapshot.data ?? []).take(5).toList();
+      builder: (context, recipesSnapshot) {
+        final recipes = (recipesSnapshot.data ?? []).take(5).toList();
 
         if (recipes.isEmpty) {
           return const SizedBox.shrink();
         }
 
-        return SizedBox(
-          height: 260,
-          child: PageView.builder(
-            controller: _carouselController,
-            onPageChanged: (index) {
-              _carouselPage = index % recipes.length;
-            },
-            itemBuilder: (context, index) {
-              final recipe = recipes[index % recipes.length];
+        // On précharge d'un coup l'image de CHAQUE carte du
+        // carrousel (pas seulement celle affichée en premier), pour
+        // que swiper vers une carte suivante ne déclenche jamais sa
+        // propre recherche d'image à ce moment-là — tout est déjà
+        // prêt à l'arrivée.
+        return FutureBuilder<Map<int, String?>>(
+          future: _resolveCarouselImageUrls(recipes),
+          builder: (context, urlsSnapshot) {
+            final resolvedUrls = urlsSnapshot.data ?? const {};
 
-              return Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                // Même format que l'image en tête de la fiche recette
-                // : rectangle plat (pas de coins arrondis, pas de
-                // dégradé), juste le cœur en surimpression.
-                child: _PromoRecipeCard(
-                  recipe: recipe,
-                  recipeRepository: _recipeRepository,
-                ),
-              );
-            },
-          ),
+            return SizedBox(
+              height: 260,
+              child: PageView.builder(
+                controller: _carouselController,
+                onPageChanged: (index) {
+                  _carouselPage = index % recipes.length;
+                },
+                itemBuilder: (context, index) {
+                  final recipe = recipes[index % recipes.length];
+
+                  return Padding(
+                    padding: const EdgeInsets.symmetric(horizontal: 16),
+                    // Même format que l'image en tête de la fiche
+                    // recette : rectangle plat, cœur en surimpression.
+                    child: _PromoRecipeCard(
+                      recipe: recipe,
+                      recipeRepository: _recipeRepository,
+                      preloadedImageUrl: resolvedUrls[recipe.id],
+                    ),
+                  );
+                },
+              ),
+            );
+          },
         );
       },
     );
+  }
+
+  /// Récupère en une seule fois les URLs (image, signées) de toutes
+  /// les recettes-photo du carrousel. Les recettes vidéo gèrent
+  /// elles-mêmes leur miniature via [RecipeVideoThumbnail].
+  Future<Map<int, String?>> _resolveCarouselImageUrls(
+    List<RecipeModel> recipes,
+  ) async {
+    final photoRecipes =
+        recipes.where((r) => r.sourceType != 'video').toList();
+
+    final urls = await Future.wait(
+      photoRecipes.map((r) => _recipeRepository.getRecipeImageUrl(r.imageUrl)),
+    );
+
+    return {
+      for (var i = 0; i < photoRecipes.length; i++) photoRecipes[i].id: urls[i],
+    };
   }
 
   // ============================================================
@@ -578,10 +609,12 @@ class HomeTabViewState extends State<HomeTabView> {
 class _PromoRecipeCard extends StatefulWidget {
   final RecipeModel recipe;
   final RecipeRepository recipeRepository;
+  final String? preloadedImageUrl;
 
   const _PromoRecipeCard({
     required this.recipe,
     required this.recipeRepository,
+    this.preloadedImageUrl,
   });
 
   @override
@@ -658,37 +691,27 @@ class _PromoRecipeCardState extends State<_PromoRecipeCard> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  recipe.sourceType == 'video'
-                      ? Container(
-                          color: colorScheme.surfaceContainerHighest,
-                          child: Icon(
-                            Icons.play_circle_outline,
-                            size: 36,
-                            color: colorScheme.onSurfaceVariant,
-                          ),
+                  recipe.sourceType == 'video' &&
+                          recipe.videoUrl != null &&
+                          recipe.videoUrl!.isNotEmpty
+                      ? RecipeVideoThumbnail(
+                          videoPath: recipe.videoUrl!,
+                          recipeRepository: widget.recipeRepository,
                         )
-                      : FutureBuilder<String?>(
-                          future: widget.recipeRepository
-                              .getRecipeImageUrl(recipe.imageUrl),
-                          builder: (context, snapshot) {
-                            final url = snapshot.data;
-
-                            return Container(
-                              color: colorScheme.surfaceContainerHighest,
-                              child: url != null
-                                  ? Image.network(
-                                      url,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stack) {
-                                        return const Icon(Icons.restaurant);
-                                      },
-                                    )
-                                  : Icon(
-                                      Icons.restaurant,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                            );
-                          },
+                      : Container(
+                          color: colorScheme.surfaceContainerHighest,
+                          child: widget.preloadedImageUrl != null
+                              ? Image.network(
+                                  widget.preloadedImageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stack) {
+                                    return const Icon(Icons.restaurant);
+                                  },
+                                )
+                              : Icon(
+                                  Icons.restaurant,
+                                  color: colorScheme.onSurfaceVariant,
+                                ),
                         ),
                   Positioned(
                     bottom: 8,

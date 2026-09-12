@@ -4,6 +4,7 @@ import '../../core/app_bar_leading.dart';
 import '../../core/app_drawer.dart';
 import '../../models/recipe_model.dart';
 import '../../repositories/recipe_repository.dart';
+import '../../widgets/recipe_video_thumbnail.dart';
 import '../../features/recipes/presentation/create_video_recipe_page.dart';
 import 'recipe_detail_page.dart';
 
@@ -226,109 +227,181 @@ class _MyRecipesPageState extends State<MyRecipesPage> {
   Widget _buildRecipeCard(RecipeModel recipe) {
     final colorScheme = Theme.of(context).colorScheme;
 
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      decoration: BoxDecoration(
-        color: colorScheme.surfaceContainerHighest,
-        borderRadius: BorderRadius.circular(16),
+    return Dismissible(
+      key: ValueKey(recipe.id),
+      direction: DismissDirection.endToStart,
+      confirmDismiss: (_) => _confirmDeleteRecipe(recipe),
+      onDismissed: (_) => _deleteRecipe(recipe),
+      background: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: Colors.red,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.centerRight,
+        padding: const EdgeInsets.symmetric(horizontal: 20),
+        child: const Icon(Icons.delete, color: Colors.white),
       ),
-      child: InkWell(
-        borderRadius: BorderRadius.circular(16),
-        onTap: () => _openRecipeDetail(recipe),
-        child: Padding(
-          padding: const EdgeInsets.all(12),
-          child: Row(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              // ==================================================
-              // MINIATURE
-              // ==================================================
+      child: Container(
+        margin: const EdgeInsets.only(bottom: 14),
+        decoration: BoxDecoration(
+          color: colorScheme.surfaceContainerHighest,
+          borderRadius: BorderRadius.circular(16),
+        ),
+        child: InkWell(
+          borderRadius: BorderRadius.circular(16),
+          onTap: () => _openRecipeDetail(recipe),
+          child: Padding(
+            padding: const EdgeInsets.all(12),
+            child: Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // ==================================================
+                // MINIATURE
+                // ==================================================
 
-              ClipRRect(
-                borderRadius: BorderRadius.circular(12),
-                child: SizedBox(
-                  width: 72,
-                  height: 72,
-                  child: recipe.sourceType == 'video'
-                      ? Container(
-                          color: colorScheme.surface,
-                          child: Icon(
-                            Icons.play_circle_outline,
-                            color: colorScheme.onSurfaceVariant,
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(12),
+                  child: SizedBox(
+                    width: 72,
+                    height: 72,
+                    child: recipe.sourceType == 'video' &&
+                            recipe.videoUrl != null &&
+                            recipe.videoUrl!.isNotEmpty
+                        ? RecipeVideoThumbnail(
+                            videoPath: recipe.videoUrl!,
+                            recipeRepository: _recipeRepository,
+                          )
+                        : FutureBuilder<String?>(
+                            future: _recipeRepository
+                                .getRecipeImageUrl(recipe.imageUrl),
+                            builder: (context, snapshot) {
+                              final url = snapshot.data;
+
+                              return Container(
+                                color: colorScheme.surface,
+                                child: url != null
+                                    ? Image.network(
+                                        url,
+                                        fit: BoxFit.cover,
+                                        errorBuilder:
+                                            (context, error, stack) {
+                                          return const Icon(
+                                            Icons.restaurant,
+                                          );
+                                        },
+                                      )
+                                    : Icon(
+                                        Icons.restaurant,
+                                        color: colorScheme.onSurfaceVariant,
+                                      ),
+                              );
+                            },
                           ),
-                        )
-                      : FutureBuilder<String?>(
-                          future: _recipeRepository
-                              .getRecipeImageUrl(recipe.imageUrl),
-                          builder: (context, snapshot) {
-                            final url = snapshot.data;
-
-                            return Container(
-                              color: colorScheme.surface,
-                              child: url != null
-                                  ? Image.network(
-                                      url,
-                                      fit: BoxFit.cover,
-                                      errorBuilder: (context, error, stack) {
-                                        return const Icon(Icons.restaurant);
-                                      },
-                                    )
-                                  : Icon(
-                                      Icons.restaurant,
-                                      color: colorScheme.onSurfaceVariant,
-                                    ),
-                            );
-                          },
-                        ),
+                  ),
                 ),
-              ),
 
-              const SizedBox(width: 14),
+                const SizedBox(width: 14),
 
-              // ==================================================
-              // CONTENU
-              // ==================================================
+                // ==================================================
+                // CONTENU
+                // ==================================================
 
-              Expanded(
-                child: Column(
-                  crossAxisAlignment: CrossAxisAlignment.start,
-                  children: [
-                    Text(
-                      recipe.title,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      style: const TextStyle(
-                        fontSize: 15,
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    if (recipe.categoryName != null)
-                      Padding(
-                        padding: const EdgeInsets.only(top: 2),
-                        child: Text(
-                          recipe.categoryName!,
-                          style: TextStyle(
-                            fontSize: 12,
-                            color: colorScheme.primary,
-                            fontWeight: FontWeight.w500,
-                          ),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        recipe.title,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        style: const TextStyle(
+                          fontSize: 15,
+                          fontWeight: FontWeight.w700,
                         ),
                       ),
-                    const SizedBox(height: 8),
-                    _buildStatusBadge(recipe.status),
-                  ],
+                      if (recipe.categoryName != null)
+                        Padding(
+                          padding: const EdgeInsets.only(top: 2),
+                          child: Text(
+                            recipe.categoryName!,
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: colorScheme.primary,
+                              fontWeight: FontWeight.w500,
+                            ),
+                          ),
+                        ),
+                      const SizedBox(height: 8),
+                      _buildStatusBadge(recipe.status),
+                    ],
+                  ),
                 ),
-              ),
 
-              Icon(
-                Icons.chevron_right,
-                color: colorScheme.onSurfaceVariant,
-              ),
-            ],
+                Icon(
+                  Icons.chevron_right,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ],
+            ),
           ),
         ),
       ),
     );
+  }
+
+  // ============================================================
+  // SUPPRESSION D'UNE RECETTE (glisser vers la gauche)
+  // ============================================================
+
+  Future<bool> _confirmDeleteRecipe(RecipeModel recipe) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Supprimer cette recette ?'),
+          content: Text(
+            '« ${recipe.title} » sera supprimée définitivement. '
+            'Cette action est irréversible.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(false),
+              child: const Text('Annuler'),
+            ),
+            TextButton(
+              onPressed: () => Navigator.of(dialogContext).pop(true),
+              style: TextButton.styleFrom(foregroundColor: Colors.red),
+              child: const Text('Supprimer'),
+            ),
+          ],
+        );
+      },
+    );
+
+    return confirmed ?? false;
+  }
+
+  Future<void> _deleteRecipe(RecipeModel recipe) async {
+    try {
+      await _recipeRepository.deleteRecipe(recipe.id);
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('« ${recipe.title} » a été supprimée.')),
+      );
+
+      await _refreshRecipes();
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible de supprimer : $error')),
+      );
+
+      await _refreshRecipes();
+    }
   }
 
   // ============================================================

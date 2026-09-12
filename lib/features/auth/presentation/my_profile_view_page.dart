@@ -5,6 +5,7 @@ import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_bar_leading.dart';
+import 'avatar_cropper_page.dart';
 import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/profile_repository.dart';
@@ -98,15 +99,24 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
 
     if (image == null) return;
 
+    final Uint8List originalBytes = await image.readAsBytes();
+
+    if (!mounted) return;
+
+    final croppedBytes = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute(
+        builder: (context) => AvatarCropperPage(imageBytes: originalBytes),
+      ),
+    );
+
+    if (croppedBytes == null) return;
+
     setState(() => _isUploadingAvatar = true);
 
     try {
-      final Uint8List bytes = await image.readAsBytes();
-      final extension = image.name.split('.').last.toLowerCase();
-
       final path = await _profileRepository.uploadAvatar(
-        bytes: bytes,
-        fileExtension: extension,
+        bytes: croppedBytes,
+        fileExtension: 'png',
       );
 
       await _profileRepository.updateIdentity(avatarUrl: path);
@@ -660,22 +670,6 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                                   ],
                                 ),
                               ),
-                              OutlinedButton(
-                                onPressed: () =>
-                                    _showComingSoon('Le partage du profil'),
-                                child: const Text('Partager'),
-                              ),
-                              const SizedBox(width: 8),
-                              OutlinedButton(
-                                onPressed: () async {
-                                  final updated = await Navigator.of(context)
-                                      .pushNamed('/edit-profile');
-                                  if (updated == true) {
-                                    _refresh();
-                                  }
-                                },
-                                child: const Text('Modifier'),
-                              ),
                             ],
                           ),
                           const SizedBox(height: 12),
@@ -757,6 +751,33 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                                 ),
                               );
                             },
+                          ),
+                          const SizedBox(height: 14),
+                          Row(
+                            children: [
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () => _showComingSoon(
+                                    'Le partage du profil',
+                                  ),
+                                  child: const Text('Partager'),
+                                ),
+                              ),
+                              const SizedBox(width: 8),
+                              Expanded(
+                                child: OutlinedButton(
+                                  onPressed: () async {
+                                    final updated = await Navigator.of(
+                                      context,
+                                    ).pushNamed('/edit-profile');
+                                    if (updated == true) {
+                                      _refresh();
+                                    }
+                                  },
+                                  child: const Text('Éditer le profil'),
+                                ),
+                              ),
+                            ],
                           ),
                         ],
                       );

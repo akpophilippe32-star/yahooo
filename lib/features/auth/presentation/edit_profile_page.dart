@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
 
 import '../../../repositories/profile_repository.dart';
+import 'avatar_cropper_page.dart';
 import '../data/auth_repository.dart';
 
 const List<String> _kMonthNamesFrEdit = [
@@ -134,15 +135,24 @@ class _EditProfilePageState extends State<EditProfilePage> {
 
     if (image == null) return;
 
+    final Uint8List originalBytes = await image.readAsBytes();
+
+    if (!mounted) return;
+
+    final croppedBytes = await Navigator.of(context).push<Uint8List>(
+      MaterialPageRoute(
+        builder: (context) => AvatarCropperPage(imageBytes: originalBytes),
+      ),
+    );
+
+    if (croppedBytes == null) return;
+
     setState(() => _isUploadingAvatar = true);
 
     try {
-      final Uint8List bytes = await image.readAsBytes();
-      final extension = image.name.split('.').last.toLowerCase();
-
       final path = await _profileRepository.uploadAvatar(
-        bytes: bytes,
-        fileExtension: extension,
+        bytes: croppedBytes,
+        fileExtension: 'png',
       );
 
       await _profileRepository.updateIdentity(avatarUrl: path);

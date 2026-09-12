@@ -4,17 +4,26 @@ import 'package:video_player/video_player.dart';
 
 import '../repositories/recipe_repository.dart';
 
-/// Lecteur vidéo simple pour une recette créée à partir d'une vidéo.
+/// Lecteur vidéo pour une recette créée à partir d'une vidéo.
 ///
 /// Résout lui-même une URL signée à partir du chemin de stockage
-/// (le bucket `recipe-videos` est privé), puis affiche un lecteur
-/// basique : lecture/pause au tap, barre de progression.
+/// (le bucket `recipe-videos` est privé).
+///
+/// Deux modes :
+/// - Par défaut (`fullscreenCover: false`) : lecteur classique,
+///   contenu dans son ratio d'aspect, barre de progression visible,
+///   lecture/pause au tap uniquement.
+/// - `fullscreenCover: true` : remplit tout l'espace disponible
+///   (recadré, façon Reels), démarre automatiquement, boucle en
+///   continu — utilisé par la fiche recette vidéo plein écran.
 class RecipeVideoPlayer extends StatefulWidget {
   final String videoPath;
+  final bool fullscreenCover;
 
   const RecipeVideoPlayer({
     super.key,
     required this.videoPath,
+    this.fullscreenCover = false,
   });
 
   @override
@@ -53,6 +62,11 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
       return;
     }
 
+    if (widget.fullscreenCover) {
+      await controller.setLooping(true);
+      await controller.play();
+    }
+
     setState(() {
       _controller = controller;
     });
@@ -86,6 +100,15 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
       future: _initFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
+          if (widget.fullscreenCover) {
+            return const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: CircularProgressIndicator(color: Colors.white),
+              ),
+            );
+          }
+
           return AspectRatio(
             aspectRatio: 16 / 9,
             child: Container(
@@ -108,6 +131,18 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
             '${snapshot.error}',
           );
 
+          if (widget.fullscreenCover) {
+            return const ColoredBox(
+              color: Colors.black,
+              child: Center(
+                child: Text(
+                  'Impossible de charger la vidéo.',
+                  style: TextStyle(color: Colors.white),
+                ),
+              ),
+            );
+          }
+
           return AspectRatio(
             aspectRatio: 16 / 9,
             child: Container(
@@ -125,6 +160,29 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
         }
 
         final controller = _controller!;
+
+        if (widget.fullscreenCover) {
+          return GestureDetector(
+            onTap: _togglePlayPause,
+            child: ColoredBox(
+              color: Colors.black,
+              child: SizedBox.expand(
+                child: FittedBox(
+                  fit: BoxFit.cover,
+                  child: SizedBox(
+                    width: controller.value.size.width == 0
+                        ? 1
+                        : controller.value.size.width,
+                    height: controller.value.size.height == 0
+                        ? 1
+                        : controller.value.size.height,
+                    child: VideoPlayer(controller),
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
 
         return Column(
           mainAxisSize: MainAxisSize.min,

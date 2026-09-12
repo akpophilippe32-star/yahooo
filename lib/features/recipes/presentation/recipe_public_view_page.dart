@@ -509,6 +509,14 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     final recipe = widget.recipe;
     final colorScheme = Theme.of(context).colorScheme;
 
+    final isVideo = recipe.sourceType == 'video' &&
+        recipe.videoUrl != null &&
+        recipe.videoUrl!.isNotEmpty;
+
+    if (isVideo) {
+      return _buildReelLayout(context, recipe);
+    }
+
     return DefaultTabController(
       length: 3,
       child: Scaffold(
@@ -660,6 +668,262 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
           ),
         ),
       ),
+    );
+  }
+
+  // ============================================================
+  // MISE EN PAGE "REEL" (plein écran) — recettes vidéo uniquement
+  // ============================================================
+
+  Widget _buildReelLayout(BuildContext context, RecipeModel recipe) {
+    return Scaffold(
+      backgroundColor: Colors.black,
+      drawer: const AppDrawer(),
+      body: Stack(
+        fit: StackFit.expand,
+        children: [
+          RecipeVideoPlayer(
+            videoPath: recipe.videoUrl!,
+            fullscreenCover: true,
+          ),
+
+          // Dégradés haut/bas pour la lisibilité du texte/icônes.
+          Positioned(
+            top: 0,
+            left: 0,
+            right: 0,
+            height: 120,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.55),
+                      Colors.transparent,
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+          Positioned(
+            bottom: 0,
+            left: 0,
+            right: 0,
+            height: 260,
+            child: IgnorePointer(
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.topCenter,
+                    end: Alignment.bottomCenter,
+                    colors: [
+                      Colors.transparent,
+                      Colors.black.withValues(alpha: 0.75),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+          // Retour + menu (en haut à gauche).
+          Positioned(
+            top: 8,
+            left: 8,
+            child: _CircleIconButton(
+              icon: Icons.arrow_back,
+              onTap: () => Navigator.of(context).pop(),
+            ),
+          ),
+          Positioned(
+            top: 8,
+            left: 52,
+            child: Builder(
+              builder: (context) => _CircleIconButton(
+                icon: Icons.menu,
+                onTap: () => Scaffold.of(context).openDrawer(),
+              ),
+            ),
+          ),
+
+          // Colonne d'actions à droite (façon Reels).
+          Positioned(
+            right: 10,
+            bottom: 110,
+            child: Column(
+              children: [
+                if (recipe.authorId != null)
+                  _ReelAction(
+                    child: CircleAvatar(
+                      radius: 22,
+                      backgroundColor: Colors.white,
+                      child: Icon(
+                        Icons.person,
+                        color: Colors.black.withValues(alpha: 0.6),
+                      ),
+                    ),
+                    onTap: () {
+                      final currentUserId =
+                          Supabase.instance.client.auth.currentUser?.id;
+                      final isOwnRecipe = currentUserId == recipe.authorId;
+
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => isOwnRecipe
+                              ? const MyProfileViewPage()
+                              : CreatorProfilePage(authorId: recipe.authorId!),
+                        ),
+                      );
+                    },
+                  ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: _isLiked ? Icons.favorite : Icons.favorite_border,
+                  iconColor: _isLiked ? Colors.red : Colors.white,
+                  label: '$_likeCount',
+                  onTap: _isLikeLoading ? null : _toggleLike,
+                ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: Icons.forum_outlined,
+                  label: 'Avis',
+                  onTap: _showRatingSheet,
+                ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: Icons.shopping_basket_outlined,
+                  label: 'Ingrédients',
+                  onTap: _showIngredientsSheet,
+                ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: Icons.calendar_month_outlined,
+                  label: 'Planifier',
+                  onTap: _showAddToPlanSheet,
+                ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: Icons.soup_kitchen_outlined,
+                  label: 'Cuisiner',
+                  onTap: _openCookingMode,
+                ),
+                const SizedBox(height: 22),
+                _ReelAction(
+                  icon: Icons.share_outlined,
+                  label: 'Partager',
+                  onTap: () => _showComingSoon('Le partage'),
+                ),
+              ],
+            ),
+          ),
+
+          // Titre / auteur / description en bas à gauche.
+          Positioned(
+            left: 16,
+            right: 90,
+            bottom: 24,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                if (_authorName != null)
+                  Text(
+                    _authorName!,
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontWeight: FontWeight.w700,
+                      fontSize: 13,
+                    ),
+                  ),
+                const SizedBox(height: 6),
+                Text(
+                  recipe.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.bold,
+                    fontSize: 18,
+                  ),
+                ),
+                if (recipe.description != null &&
+                    recipe.description!.trim().isNotEmpty) ...[
+                  const SizedBox(height: 6),
+                  Text(
+                    recipe.description!,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: TextStyle(
+                      color: Colors.white.withValues(alpha: 0.85),
+                      fontSize: 13,
+                    ),
+                  ),
+                ],
+                if (!_isRatingLoading && _ratingCount > 0) ...[
+                  const SizedBox(height: 8),
+                  Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      const Icon(Icons.star, size: 14, color: Colors.amber),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${_averageRating.toStringAsFixed(1)} '
+                        '($_ratingCount avis)',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Future<void> _showIngredientsSheet() async {
+    await showModalBottomSheet<void>(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Theme.of(context).scaffoldBackgroundColor,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (sheetContext) {
+        return DraggableScrollableSheet(
+          initialChildSize: 0.6,
+          maxChildSize: 0.9,
+          expand: false,
+          builder: (context, scrollController) {
+            return Column(
+              children: [
+                const SizedBox(height: 8),
+                Container(
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: Theme.of(context).colorScheme.outline,
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+                const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    'Ingrédients',
+                    style: TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+                  ),
+                ),
+                Expanded(child: _buildIngredientsTab(context)),
+              ],
+            );
+          },
+        );
+      },
     );
   }
 
@@ -1087,6 +1351,55 @@ class _CircleIconButton extends StatelessWidget {
 // ============================================================
 // ACTION RAPIDE (Planifier / Cuisiner / Courses)
 // ============================================================
+
+// ============================================================
+// ACTION DE LA COLONNE REEL (icône ou avatar + libellé optionnel)
+// ============================================================
+
+class _ReelAction extends StatelessWidget {
+  final IconData? icon;
+  final Widget? child;
+  final Color iconColor;
+  final String? label;
+  final VoidCallback? onTap;
+
+  const _ReelAction({
+    this.icon,
+    this.child,
+    this.label,
+    this.onTap,
+    this.iconColor = Colors.white,
+  }) : assert(icon != null || child != null);
+
+  @override
+  Widget build(BuildContext context) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(30),
+      child: Column(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          child ??
+              Icon(icon, color: iconColor, size: 30, shadows: const [
+                Shadow(color: Colors.black54, blurRadius: 6),
+              ]),
+          if (label != null) ...[
+            const SizedBox(height: 4),
+            Text(
+              label!,
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                shadows: [Shadow(color: Colors.black54, blurRadius: 6)],
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
 
 class _QuickAction extends StatelessWidget {
   final IconData icon;

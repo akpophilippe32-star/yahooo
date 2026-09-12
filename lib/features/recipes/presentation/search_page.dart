@@ -8,6 +8,7 @@ import '../../../models/recipe_model.dart';
 import '../../../repositories/category_repository.dart';
 import '../../../repositories/recipe_repository.dart';
 import '../../../widgets/recipe_grid_card.dart';
+import '../../../widgets/recipe_video_thumbnail.dart';
 import 'recipe_public_view_page.dart';
 
 /// Contenu de l'onglet Recherche (§17 du cahier des charges) — un
@@ -466,13 +467,12 @@ class _RecipeListTile extends StatelessWidget {
             child: SizedBox(
               width: 64,
               height: 64,
-              child: recipe.sourceType == 'video'
-                  ? Container(
-                      color: colorScheme.surfaceContainerHighest,
-                      child: Icon(
-                        Icons.play_circle_outline,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+              child: recipe.sourceType == 'video' &&
+                      recipe.videoUrl != null &&
+                      recipe.videoUrl!.isNotEmpty
+                  ? RecipeVideoThumbnail(
+                      videoPath: recipe.videoUrl!,
+                      recipeRepository: recipeRepository,
                     )
                   : FutureBuilder<String?>(
                       future:
@@ -581,14 +581,12 @@ class _RecipeCompactTile extends StatelessWidget {
         child: SizedBox(
           width: 40,
           height: 40,
-          child: recipe.sourceType == 'video'
-              ? Container(
-                  color: colorScheme.surfaceContainerHighest,
-                  child: Icon(
-                    Icons.play_circle_outline,
-                    size: 18,
-                    color: colorScheme.onSurfaceVariant,
-                  ),
+          child: recipe.sourceType == 'video' &&
+                  recipe.videoUrl != null &&
+                  recipe.videoUrl!.isNotEmpty
+              ? RecipeVideoThumbnail(
+                  videoPath: recipe.videoUrl!,
+                  recipeRepository: recipeRepository,
                 )
               : FutureBuilder<String?>(
                   future: recipeRepository.getRecipeImageUrl(recipe.imageUrl),

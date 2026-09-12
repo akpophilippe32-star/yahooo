@@ -20,6 +20,8 @@ class RecipeRepository {
           author_id,
           description,
           image_url,
+          video_url,
+          source_type,
           prep_time,
           cook_time,
           servings,
@@ -81,6 +83,8 @@ class RecipeRepository {
           author_id,
           description,
           image_url,
+          video_url,
+          source_type,
           prep_time,
           cook_time,
           servings,
@@ -444,6 +448,8 @@ class RecipeRepository {
           author_id,
           description,
           image_url,
+          video_url,
+          source_type,
           prep_time,
           cook_time,
           servings,
@@ -1346,6 +1352,37 @@ class RecipeRepository {
       throw Exception(
         'La publication a été refusée par le serveur '
         '(vérifie que ton rôle est bien "creator" ou "admin").',
+      );
+    }
+  }
+
+  // ============================================================
+  // SUPPRESSION D'UNE RECETTE
+  // ============================================================
+
+  /// Supprime définitivement une recette (brouillon, publiée ou
+  /// archivée) — utilisé notamment pour nettoyer les brouillons non
+  /// aboutis. Irréversible : ingrédients, étapes, likes,
+  /// commentaires et notes associés partent avec (contraintes
+  /// ON DELETE CASCADE en base).
+  Future<void> deleteRecipe(int recipeId) async {
+    final user = _supabase.auth.currentUser;
+
+    if (user == null) {
+      throw Exception('Utilisateur non connecté.');
+    }
+
+    final response = await _supabase
+        .from('recipes')
+        .delete()
+        .eq('id', recipeId)
+        .eq('author_id', user.id)
+        .select('id');
+
+    if ((response as List).isEmpty) {
+      throw Exception(
+        'Suppression refusée (recette introuvable ou droits '
+        'insuffisants).',
       );
     }
   }

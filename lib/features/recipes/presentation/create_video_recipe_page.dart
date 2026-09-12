@@ -38,6 +38,8 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
 
   XFile? _selectedVideo;
   bool _isLoading = false;
+  bool _isExiting = false;
+  bool? _isRequestingAiAnalysis;
 
   @override
   void initState() {
@@ -90,6 +92,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
 
     setState(() {
       _isLoading = true;
+      _isRequestingAiAnalysis = requestAiAnalysis;
     });
 
     try {
@@ -105,7 +108,9 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
       // .timeout(...) : sans ça, si la requête réseau ne répond
       // jamais (ni succès, ni erreur), le bouton reste bloqué à
       // vie sur "chargement" sans aucun message. Avec le timeout,
-      // ça échoue proprement après 45s et l'utilisateur est prévenu.
+      // ça échoue proprement après un délai raisonnable et
+      // l'utilisateur est prévenu. Délai généreux (4 min) car
+      // l'envoi d'une vidéo peut être lent, surtout sur mobile.
 
       final videoPath = await _recipeRepository
           .uploadRecipeVideo(
@@ -113,10 +118,11 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
             fileExtension: extension,
           )
           .timeout(
-            const Duration(seconds: 45),
+            const Duration(minutes: 4),
             onTimeout: () => throw Exception(
               'L’envoi de la vidéo a pris trop de temps '
-              '(vérifie ta connexion et réessaie).',
+              '(vérifie ta connexion, ou essaie avec une vidéo '
+              'plus courte).',
             ),
           );
 
@@ -134,7 +140,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
             categoryId: _selectedCategoryId,
           )
           .timeout(
-            const Duration(seconds: 30),
+            const Duration(seconds: 60),
             onTimeout: () => throw Exception(
               'La création de la recette a pris trop de temps '
               '(vérifie ta connexion et réessaie).',
@@ -188,6 +194,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
 
       if (!mounted) return;
 
+      _isExiting = true;
       Navigator.of(context).pop(result);
     } catch (error) {
       if (!mounted) return;
@@ -203,6 +210,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
       if (mounted) {
         setState(() {
           _isLoading = false;
+          _isRequestingAiAnalysis = null;
         });
       }
     }
@@ -215,7 +223,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
   @override
   Widget build(BuildContext context) {
     return PopScope(
-      canPop: false,
+      canPop: _isExiting,
       onPopInvokedWithResult: (didPop, result) async {
         if (didPop) return;
         await _handleExitAttempt();
@@ -412,12 +420,11 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
               // ========================================================
 
               FilledButton.icon(
-                onPressed: _isLoading
-                    ? null
-                    : () => _createVideoRecipe(
-                          requestAiAnalysis: true,
-                        ),
-                icon: _isLoading
+                onPressed: () {
+                  if (_isLoading) return;
+                  _createVideoRecipe(requestAiAnalysis: true);
+                },
+                icon: _isRequestingAiAnalysis == true
                     ? const SizedBox(
                         width: 20,
                         height: 20,
@@ -434,12 +441,17 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
               const SizedBox(height: 12),
 
               OutlinedButton.icon(
-                onPressed: _isLoading
-                    ? null
-                    : () => _createVideoRecipe(
-                          requestAiAnalysis: false,
-                        ),
-                icon: const Icon(Icons.edit_note_outlined),
+                onPressed: () {
+                  if (_isLoading) return;
+                  _createVideoRecipe(requestAiAnalysis: false);
+                },
+                icon: _isRequestingAiAnalysis == false
+                    ? const SizedBox(
+                        width: 20,
+                        height: 20,
+                        child: CircularProgressIndicator(strokeWidth: 2),
+                      )
+                    : const Icon(Icons.edit_note_outlined),
                 label: const Text(
                   'Créer sans analyse IA (je complète moi-même)',
                 ),
@@ -464,6 +476,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
   Future<void> _handleExitAttempt() async {
     if (_titleController.text.trim().isEmpty || _selectedVideo == null) {
       // Rien d'assez significatif à sauvegarder.
+      _isExiting = true;
       if (mounted) {
         Navigator.of(context).pop();
       }
@@ -497,7 +510,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
             bytes: bytes,
             fileExtension: extension,
           )
-          .timeout(const Duration(seconds: 45));
+          .timeout(const Duration(minutes: 4));
 
       final recipeMap = await _recipeRepository
           .createVideoDraft(
@@ -508,7 +521,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
                 : _descriptionController.text.trim(),
             categoryId: _selectedCategoryId,
           )
-          .timeout(const Duration(seconds: 30));
+          .timeout(const Duration(seconds: 60));
 
       final recipe = RecipeModel.fromMap(recipeMap);
 
@@ -522,6 +535,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
         ),
       );
 
+      _isExiting = true;
       Navigator.of(context).pop();
     } catch (error) {
       // On ne force pas la sortie en cas d'échec : on reste sur
