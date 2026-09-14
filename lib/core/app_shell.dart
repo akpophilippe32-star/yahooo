@@ -6,7 +6,6 @@ import '../features/home/home_page.dart';
 import '../features/recipes/presentation/search_page.dart';
 import '../features/planner/presentation/meal_plan_page.dart';
 import '../features/shopping/presentation/shopping_list_page.dart';
-import '../features/notifications/presentation/notifications_page.dart';
 import '../repositories/notification_repository.dart';
 
 /// Coquille persistante de l'application : Drawer, en-tête, bouton
@@ -55,7 +54,12 @@ class _AppShellPageState extends State<AppShellPage> {
     _tabs = [
       HomeTabView(
         key: _homeKey,
-        onOpenSearch: () => setState(() => _currentIndex = 1),
+        onOpenSearch: (categoryId) {
+          setState(() => _currentIndex = 1);
+          WidgetsBinding.instance.addPostFrameCallback((_) {
+            _searchKey.currentState?.selectCategoryFromOutside(categoryId);
+          });
+        },
       ),
       SearchTabView(key: _searchKey),
       MealPlanTabView(key: _mealPlanKey),
@@ -166,12 +170,6 @@ class _AppShellPageState extends State<AppShellPage> {
 
   void _cyclePlanDensity() {
     _mealPlanKey.currentState?.cycleDensity();
-  }
-
-  void _showComingSoon(String feature) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('$feature — bientôt disponible.')),
-    );
   }
 
   // ============================================================
@@ -339,6 +337,7 @@ class _AppShellPageState extends State<AppShellPage> {
 
       bottomNavigationBar: BottomAppBar(
         height: 56,
+        color: Theme.of(context).scaffoldBackgroundColor,
         shape: const CircularNotchedRectangle(),
         notchMargin: 6,
         elevation: 8,

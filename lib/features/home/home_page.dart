@@ -20,7 +20,7 @@ import '../recipes/presentation/recipe_public_view_page.dart';
 /// Pas de Scaffold/Drawer/nav ici — c'est la coquille d'app
 /// persistante (AppShellPage) qui les fournit.
 class HomeTabView extends StatefulWidget {
-  final VoidCallback onOpenSearch;
+  final void Function(int? categoryId) onOpenSearch;
 
   const HomeTabView({super.key, required this.onOpenSearch});
 
@@ -208,7 +208,7 @@ class HomeTabViewState extends State<HomeTabView> {
                       ),
                     ),
                     TextButton(
-                      onPressed: widget.onOpenSearch,
+                      onPressed: () => widget.onOpenSearch(null),
                       child: const Text('Voir tout'),
                     ),
                   ],
@@ -239,7 +239,7 @@ class HomeTabViewState extends State<HomeTabView> {
                       ),
                     ),
                     TextButton(
-                      onPressed: widget.onOpenSearch,
+                      onPressed: () => widget.onOpenSearch(null),
                       child: const Text('Voir tout'),
                     ),
                   ],
@@ -423,45 +423,49 @@ class HomeTabViewState extends State<HomeTabView> {
 
               return SizedBox(
                 width: 60,
-                child: Column(
-                  children: [
-                    ClipOval(
-                      child: Container(
-                        width: 52,
-                        height: 52,
-                        color: Theme.of(context)
-                            .colorScheme
-                            .surfaceContainerHighest,
-                        child: category.imageUrl != null
-                            ? Image.network(
-                                category.imageUrl!,
-                                fit: BoxFit.cover,
-                                errorBuilder: (context, error, stackTrace) {
-                                  return Icon(
-                                    Icons.restaurant_outlined,
-                                    color: Theme.of(context)
-                                        .colorScheme
-                                        .onSurfaceVariant,
-                                  );
-                                },
-                              )
-                            : Icon(
-                                Icons.restaurant_outlined,
-                                color: Theme.of(context)
-                                    .colorScheme
-                                    .onSurfaceVariant,
-                              ),
+                child: InkWell(
+                  onTap: () => widget.onOpenSearch(category.id),
+                  borderRadius: BorderRadius.circular(12),
+                  child: Column(
+                    children: [
+                      ClipOval(
+                        child: Container(
+                          width: 52,
+                          height: 52,
+                          color: Theme.of(context)
+                              .colorScheme
+                              .surfaceContainerHighest,
+                          child: category.imageUrl != null
+                              ? Image.network(
+                                  category.imageUrl!,
+                                  fit: BoxFit.cover,
+                                  errorBuilder: (context, error, stackTrace) {
+                                    return Icon(
+                                      Icons.restaurant_outlined,
+                                      color: Theme.of(context)
+                                          .colorScheme
+                                          .onSurfaceVariant,
+                                    );
+                                  },
+                                )
+                              : Icon(
+                                  Icons.restaurant_outlined,
+                                  color: Theme.of(context)
+                                      .colorScheme
+                                      .onSurfaceVariant,
+                                ),
+                        ),
                       ),
-                    ),
-                    const SizedBox(height: 6),
-                    Text(
-                      category.name,
-                      maxLines: 1,
-                      overflow: TextOverflow.ellipsis,
-                      textAlign: TextAlign.center,
-                      style: const TextStyle(fontSize: 11),
-                    ),
-                  ],
+                      const SizedBox(height: 6),
+                      Text(
+                        category.name,
+                        maxLines: 1,
+                        overflow: TextOverflow.ellipsis,
+                        textAlign: TextAlign.center,
+                        style: const TextStyle(fontSize: 11),
+                      ),
+                    ],
+                  ),
                 ),
               );
             },

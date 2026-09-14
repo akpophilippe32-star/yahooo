@@ -169,6 +169,14 @@ class SearchTabViewState extends State<SearchTabView> {
     _runSearch();
   }
 
+  /// Présélectionne une catégorie depuis l'extérieur (appelée
+  /// depuis la coquille quand on tape une catégorie sur l'Accueil).
+  /// `null` réinitialise le filtre (bouton "Voir tout").
+  void selectCategoryFromOutside(int? categoryId) {
+    setState(() => _selectedCategoryId = categoryId);
+    _runSearch();
+  }
+
   void _searchFor(String term) {
     _searchController.text = term;
     _searchController.selection = TextSelection.fromPosition(

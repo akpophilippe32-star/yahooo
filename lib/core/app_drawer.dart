@@ -6,8 +6,8 @@ import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'theme/theme_controller.dart';
 import '../features/auth/data/auth_repository.dart';
-import '../repositories/profile_repository.dart';
 import '../features/auth/presentation/avatar_cropper_page.dart';
+import '../repositories/profile_repository.dart';
 
 /// Menu latéral (hamburger) réutilisable sur **toutes** les pages
 /// de l'app — pas seulement les 4 onglets principaux.
@@ -101,6 +101,8 @@ class _AppDrawerState extends State<AppDrawer> {
       if (mounted) setState(() => _isUploadingAvatar = false);
     }
   }
+
+  // ============================================================
 
   Future<bool> _checkIsCreator() async {
     final user = Supabase.instance.client.auth.currentUser;
@@ -363,8 +365,9 @@ class _AppDrawerState extends State<AppDrawer> {
                                   right: -2,
                                   bottom: -2,
                                   child: InkWell(
-                                    onTap:
-                                        _isUploadingAvatar ? null : _pickAvatar,
+                                    onTap: _isUploadingAvatar
+                                        ? null
+                                        : _pickAvatar,
                                     customBorder: const CircleBorder(),
                                     child: Container(
                                       width: 22,

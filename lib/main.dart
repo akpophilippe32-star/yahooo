@@ -24,13 +24,21 @@ Future<void> main() async {
   // thème au démarrage.
   await ThemeController.instance.loadFromPrefs();
 
+  // Supabase persiste déjà la session localement d'une ouverture à
+  // l'autre, mais l'app démarrait toujours sur l'écran de bienvenue
+  // sans jamais vérifier si une session valide existait déjà — on
+  // redemandait donc de se reconnecter à chaque lancement, même
+  // juste après s'être connecté. On saute directement à l'accueil
+  // si une session est déjà active.
+  final hasSession = Supabase.instance.client.auth.currentSession != null;
+
   runApp(
     // DevicePreview permet de simuler différents téléphones (taille,
     // encoches, orientation...) directement dans le navigateur.
     // Actif uniquement hors mode release (jamais en production).
     DevicePreview(
       enabled: !kReleaseMode,
-      builder: (context) => const MealoraApp(),
+      builder: (context) => MealoraApp(initialRoute: hasSession ? '/home' : '/'),
     ),
   );
 }
@@ -51,7 +59,9 @@ class AppScrollBehavior extends MaterialScrollBehavior {
 }
 
 class MealoraApp extends StatelessWidget {
-  const MealoraApp({super.key});
+  final String initialRoute;
+
+  const MealoraApp({super.key, this.initialRoute = '/'});
 
   @override
   Widget build(BuildContext context) {
@@ -76,7 +86,7 @@ class MealoraApp extends StatelessWidget {
           // Corrige le scroll à la souris dans la simulation Chrome.
           scrollBehavior: AppScrollBehavior(),
 
-          initialRoute: '/',
+          initialRoute: initialRoute,
 
           onGenerateRoute: AppRouter.generateRoute,
         );

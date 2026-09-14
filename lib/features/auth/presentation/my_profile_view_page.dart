@@ -1,17 +1,15 @@
-import 'dart:typed_data';
-
 import 'package:flutter/material.dart';
-import 'package:image_picker/image_picker.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_bar_leading.dart';
-import 'avatar_cropper_page.dart';
 import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/profile_repository.dart';
 import '../../../repositories/recipe_repository.dart';
 import '../data/auth_repository.dart';
+import '../../../widgets/full_screen_image_viewer.dart';
 import '../../recipes/presentation/recipe_public_view_page.dart';
+import '../../../widgets/recipe_video_thumbnail.dart';
 
 const List<String> _kMonthNamesFr = [
   'janvier',
@@ -46,12 +44,10 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
   final _profileRepository = ProfileRepository();
   final _recipeRepository = RecipeRepository();
   final _authRepository = AuthRepository();
-  final _imagePicker = ImagePicker();
 
   late Future<Map<String, dynamic>> _profileFuture;
   late Future<List<RecipeModel>> _recipesFuture;
 
-  bool _isUploadingAvatar = false;
   bool _isSubmittingApplication = false;
   String? _avatarPath;
   String _role = 'user';
@@ -89,52 +85,6 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
   Future<void> _refresh() async {
     setState(_load);
     await Future.wait([_profileFuture, _recipesFuture]);
-  }
-
-  Future<void> _pickAvatar() async {
-    final XFile? image = await _imagePicker.pickImage(
-      source: ImageSource.gallery,
-      imageQuality: 85,
-    );
-
-    if (image == null) return;
-
-    final Uint8List originalBytes = await image.readAsBytes();
-
-    if (!mounted) return;
-
-    final croppedBytes = await Navigator.of(context).push<Uint8List>(
-      MaterialPageRoute(
-        builder: (context) => AvatarCropperPage(imageBytes: originalBytes),
-      ),
-    );
-
-    if (croppedBytes == null) return;
-
-    setState(() => _isUploadingAvatar = true);
-
-    try {
-      final path = await _profileRepository.uploadAvatar(
-        bytes: croppedBytes,
-        fileExtension: 'png',
-      );
-
-      await _profileRepository.updateIdentity(avatarUrl: path);
-
-      if (!mounted) return;
-
-      setState(() => _avatarPath = path);
-    } catch (error) {
-      if (!mounted) return;
-
-      ScaffoldMessenger.of(context).showSnackBar(
-        SnackBar(
-          content: Text('Impossible de mettre à jour la photo : $error'),
-        ),
-      );
-    } finally {
-      if (mounted) setState(() => _isUploadingAvatar = false);
-    }
   }
 
   String _roleLabel(String role) {
@@ -527,77 +477,49 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                         Positioned(
                           left: 20,
                           bottom: -40,
-                          child: Stack(
-                            children: [
-                              Container(
-                                padding: const EdgeInsets.all(4),
-                                decoration: BoxDecoration(
-                                  shape: BoxShape.circle,
-                                  color:
-                                      Theme.of(context).scaffoldBackgroundColor,
-                                ),
-                                child: FutureBuilder<String?>(
-                                  future: _profileRepository
-                                      .getAvatarUrl(_avatarPath),
-                                  builder: (context, avatarSnapshot) {
-                                    final url = avatarSnapshot.data;
+                          child: Container(
+                            padding: const EdgeInsets.all(4),
+                            decoration: BoxDecoration(
+                              shape: BoxShape.circle,
+                              color: Theme.of(context).scaffoldBackgroundColor,
+                            ),
+                            child: FutureBuilder<String?>(
+                              future:
+                                  _profileRepository.getAvatarUrl(_avatarPath),
+                              builder: (context, avatarSnapshot) {
+                                final url = avatarSnapshot.data;
 
-                                    return CircleAvatar(
-                                      radius: 40,
-                                      backgroundColor:
-                                          colorScheme.surfaceContainerHighest,
-                                      backgroundImage: url != null
-                                          ? NetworkImage(url)
-                                          : null,
-                                      child: url == null
-                                          ? Icon(
-                                              Icons.person,
-                                              size: 36,
-                                              color:
-                                                  colorScheme.onSurfaceVariant,
-                                            )
-                                          : null,
-                                    );
-                                  },
-                                ),
-                              ),
-                              Positioned(
-                                right: 0,
-                                bottom: 0,
-                                child: InkWell(
-                                  onTap: _isUploadingAvatar
+                                return GestureDetector(
+                                  onTap: url == null
                                       ? null
-                                      : _pickAvatar,
-                                  customBorder: const CircleBorder(),
-                                  child: Container(
-                                    width: 26,
-                                    height: 26,
-                                    decoration: BoxDecoration(
-                                      shape: BoxShape.circle,
-                                      color: colorScheme.primary,
-                                      border: Border.all(
-                                        color: Theme.of(context)
-                                            .scaffoldBackgroundColor,
-                                        width: 2,
-                                      ),
-                                    ),
-                                    child: _isUploadingAvatar
-                                        ? const Padding(
-                                            padding: EdgeInsets.all(5),
-                                            child: CircularProgressIndicator(
-                                              strokeWidth: 2,
-                                              color: Colors.white,
+                                      : () {
+                                          Navigator.of(context).push(
+                                            MaterialPageRoute(
+                                              builder: (context) =>
+                                                  FullScreenImageViewer(
+                                                imageUrl: url,
+                                              ),
                                             ),
+                                          );
+                                        },
+                                  child: CircleAvatar(
+                                    radius: 40,
+                                    backgroundColor:
+                                        colorScheme.surfaceContainerHighest,
+                                    backgroundImage: url != null
+                                        ? NetworkImage(url)
+                                        : null,
+                                    child: url == null
+                                        ? Icon(
+                                            Icons.person,
+                                            size: 36,
+                                            color: colorScheme.onSurfaceVariant,
                                           )
-                                        : const Icon(
-                                            Icons.camera_alt,
-                                            size: 13,
-                                            color: Colors.white,
-                                          ),
+                                        : null,
                                   ),
-                                ),
-                              ),
-                            ],
+                                );
+                              },
+                            ),
                           ),
                         ),
                       ],
@@ -1032,13 +954,12 @@ class _ProfileRecipeCard extends StatelessWidget {
           Expanded(
             child: ClipRRect(
               borderRadius: BorderRadius.circular(14),
-              child: recipe.sourceType == 'video'
-                  ? Container(
-                      color: colorScheme.surfaceContainerHighest,
-                      child: Icon(
-                        Icons.play_circle_outline,
-                        color: colorScheme.onSurfaceVariant,
-                      ),
+              child: recipe.sourceType == 'video' &&
+                      recipe.videoUrl != null &&
+                      recipe.videoUrl!.isNotEmpty
+                  ? RecipeVideoThumbnail(
+                      videoPath: recipe.videoUrl!,
+                      recipeRepository: recipeRepository,
                     )
                   : FutureBuilder<String?>(
                       future:

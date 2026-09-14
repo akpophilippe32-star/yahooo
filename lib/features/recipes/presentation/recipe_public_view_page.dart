@@ -679,13 +679,16 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     return Scaffold(
       backgroundColor: Colors.black,
       drawer: const AppDrawer(),
-      body: Stack(
-        fit: StackFit.expand,
+      body: Column(
         children: [
-          RecipeVideoPlayer(
-            videoPath: recipe.videoUrl!,
-            fullscreenCover: true,
-          ),
+          Expanded(
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                RecipeVideoPlayer(
+                  videoPath: recipe.videoUrl!,
+                  fullscreenCover: true,
+                ),
 
           // Dégradés haut/bas pour la lisibilité du texte/icônes.
           Positioned(
@@ -882,6 +885,62 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             ),
           ),
         ],
+      ),
+    ),
+    _buildReelCommentBar(),
+        ],
+      ),
+    );
+  }
+
+  /// Barre de commentaire fixée en bas, façon X : un champ texte
+  /// ("Ajoutez un commentaire...") + bouton d'envoi, toujours
+  /// visible sous la vidéo — sans passer par une feuille séparée.
+  Widget _buildReelCommentBar() {
+    return SafeArea(
+      top: false,
+      child: Container(
+        color: Colors.black,
+        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
+        child: Row(
+          children: [
+            Expanded(
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16),
+                decoration: BoxDecoration(
+                  color: Colors.white.withValues(alpha: 0.12),
+                  borderRadius: BorderRadius.circular(24),
+                ),
+                child: TextField(
+                  controller: _commentController,
+                  style: const TextStyle(color: Colors.white, fontSize: 13),
+                  decoration: const InputDecoration(
+                    hintText: 'Ajoutez un commentaire...',
+                    hintStyle: TextStyle(color: Colors.white54),
+                    border: InputBorder.none,
+                    isDense: true,
+                    contentPadding: EdgeInsets.symmetric(vertical: 12),
+                  ),
+                  minLines: 1,
+                  maxLines: 3,
+                ),
+              ),
+            ),
+            IconButton(
+              onPressed: _isSubmittingComment ? null : _submitComment,
+              icon: _isSubmittingComment
+                  ? const SizedBox(
+                      width: 18,
+                      height: 18,
+                      child: CircularProgressIndicator(
+                        strokeWidth: 2,
+                        color: Colors.white,
+                      ),
+                    )
+                  : const Icon(Icons.send, color: Colors.white),
+            ),
+          ],
+        ),
       ),
     );
   }
