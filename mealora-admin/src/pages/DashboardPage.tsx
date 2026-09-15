@@ -254,7 +254,7 @@ export default function DashboardPage() {
         }}
       >
         <div className="dashboard-greeting">
-          <h1>Bonjour ! 👋</h1>
+          <h1>Bonjour !</h1>
           <p>Voici un aperçu de votre plateforme Mealora</p>
         </div>
         <div className="dashboard-date">

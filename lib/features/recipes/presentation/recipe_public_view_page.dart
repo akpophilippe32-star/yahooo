@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../core/app_drawer.dart';
+import 'package:flutter/services.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/recipe_repository.dart';
 import '../../../repositories/meal_plan_repository.dart';
@@ -50,6 +51,13 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   final TextEditingController _commentController = TextEditingController();
   bool _isSubmittingComment = false;
 
+  // Panneau de commentaires façon Instagram (vidéo réduite en haut
+  // + liste de commentaires en dessous). La clé globale garantit
+  // que c'est la MÊME lecture vidéo qui continue, pas une nouvelle
+  // qui redémarre, quand on bascule entre plein écran et réduit.
+  final GlobalKey _videoPlayerKey = GlobalKey();
+  bool _showComments = false;
+
   String? _authorName;
 
   @override
@@ -62,6 +70,13 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     _loadLikeState();
     _loadRatingState();
     _loadAuthorName();
+
+    // S'assure que la barre de statut ET la barre de navigation
+    // Android restent visibles (mode "edge to edge", comme
+    // Instagram) plutôt qu'en immersion totale qui les cache. Ça
+    // s'applique à l'écran entier (pas seulement au mode Reel), ce
+    // qui ne change rien pour les recettes photo.
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   Future<void> _loadAuthorName() async {
@@ -676,218 +691,420 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   // ============================================================
 
   Widget _buildReelLayout(BuildContext context, RecipeModel recipe) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      drawer: const AppDrawer(),
-      body: Column(
-        children: [
-          Expanded(
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                RecipeVideoPlayer(
-                  videoPath: recipe.videoUrl!,
-                  fullscreenCover: true,
-                ),
-
-          // Dégradés haut/bas pour la lisibilité du texte/icônes.
-          Positioned(
-            top: 0,
-            left: 0,
-            right: 0,
-            height: 120,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.black.withValues(alpha: 0.55),
-                      Colors.transparent,
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-          Positioned(
-            bottom: 0,
-            left: 0,
-            right: 0,
-            height: 260,
-            child: IgnorePointer(
-              child: DecoratedBox(
-                decoration: BoxDecoration(
-                  gradient: LinearGradient(
-                    begin: Alignment.topCenter,
-                    end: Alignment.bottomCenter,
-                    colors: [
-                      Colors.transparent,
-                      Colors.black.withValues(alpha: 0.75),
-                    ],
-                  ),
-                ),
-              ),
-            ),
-          ),
-
-          // Retour + menu (en haut à gauche).
-          Positioned(
-            top: 8,
-            left: 8,
-            child: _CircleIconButton(
-              icon: Icons.arrow_back,
-              onTap: () => Navigator.of(context).pop(),
-            ),
-          ),
-          Positioned(
-            top: 8,
-            left: 52,
-            child: Builder(
-              builder: (context) => _CircleIconButton(
-                icon: Icons.menu,
-                onTap: () => Scaffold.of(context).openDrawer(),
-              ),
-            ),
-          ),
-
-          // Colonne d'actions à droite (façon Reels).
-          Positioned(
-            right: 10,
-            bottom: 110,
-            child: Column(
-              children: [
-                if (recipe.authorId != null)
-                  _ReelAction(
-                    child: CircleAvatar(
-                      radius: 22,
-                      backgroundColor: Colors.white,
-                      child: Icon(
-                        Icons.person,
-                        color: Colors.black.withValues(alpha: 0.6),
-                      ),
-                    ),
-                    onTap: () {
-                      final currentUserId =
-                          Supabase.instance.client.auth.currentUser?.id;
-                      final isOwnRecipe = currentUserId == recipe.authorId;
-
-                      Navigator.of(context).push(
-                        MaterialPageRoute(
-                          builder: (context) => isOwnRecipe
-                              ? const MyProfileViewPage()
-                              : CreatorProfilePage(authorId: recipe.authorId!),
-                        ),
-                      );
-                    },
-                  ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: _isLiked ? Icons.favorite : Icons.favorite_border,
-                  iconColor: _isLiked ? Colors.red : Colors.white,
-                  label: '$_likeCount',
-                  onTap: _isLikeLoading ? null : _toggleLike,
-                ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: Icons.forum_outlined,
-                  label: 'Avis',
-                  onTap: _showRatingSheet,
-                ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: Icons.shopping_basket_outlined,
-                  label: 'Ingrédients',
-                  onTap: _showIngredientsSheet,
-                ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: Icons.calendar_month_outlined,
-                  label: 'Planifier',
-                  onTap: _showAddToPlanSheet,
-                ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: Icons.soup_kitchen_outlined,
-                  label: 'Cuisiner',
-                  onTap: _openCookingMode,
-                ),
-                const SizedBox(height: 22),
-                _ReelAction(
-                  icon: Icons.share_outlined,
-                  label: 'Partager',
-                  onTap: () => _showComingSoon('Le partage'),
-                ),
-              ],
-            ),
-          ),
-
-          // Titre / auteur / description en bas à gauche.
-          Positioned(
-            left: 16,
-            right: 90,
-            bottom: 24,
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              mainAxisSize: MainAxisSize.min,
-              children: [
-                if (_authorName != null)
-                  Text(
-                    _authorName!,
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                      fontSize: 13,
-                    ),
-                  ),
-                const SizedBox(height: 6),
-                Text(
-                  recipe.title,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.bold,
-                    fontSize: 18,
-                  ),
-                ),
-                if (recipe.description != null &&
-                    recipe.description!.trim().isNotEmpty) ...[
-                  const SizedBox(height: 6),
-                  Text(
-                    recipe.description!,
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                    style: TextStyle(
-                      color: Colors.white.withValues(alpha: 0.85),
-                      fontSize: 13,
-                    ),
-                  ),
-                ],
-                if (!_isRatingLoading && _ratingCount > 0) ...[
-                  const SizedBox(height: 8),
-                  Row(
-                    mainAxisSize: MainAxisSize.min,
-                    children: [
-                      const Icon(Icons.star, size: 14, color: Colors.amber),
-                      const SizedBox(width: 4),
-                      Text(
-                        '${_averageRating.toStringAsFixed(1)} '
-                        '($_ratingCount avis)',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontSize: 12,
-                        ),
-                      ),
-                    ],
-                  ),
-                ],
-              ],
-            ),
-          ),
-        ],
+    return AnnotatedRegion<SystemUiOverlayStyle>(
+      value: const SystemUiOverlayStyle(
+        statusBarColor: Colors.transparent,
+        statusBarIconBrightness: Brightness.light,
+        statusBarBrightness: Brightness.dark,
+        systemNavigationBarColor: Colors.black,
+        systemNavigationBarIconBrightness: Brightness.light,
       ),
-    ),
-    _buildReelCommentBar(),
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        drawer: const AppDrawer(),
+        body: Column(
+          children: [
+            _showComments
+                ? SizedBox(
+                    height: 220,
+                    child: _buildReelVideoStack(context, recipe),
+                  )
+                : Expanded(
+                    child: _buildReelVideoStack(context, recipe),
+                  ),
+            if (_showComments)
+              Expanded(child: _buildCommentsPanel(context))
+            else
+              _buildReelCommentBar(),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// La vidéo elle-même + ses superpositions (dégradés, icônes,
+  /// texte). Les superpositions ne s'affichent qu'en plein écran —
+  /// une fois réduite pour laisser place au panneau de
+  /// commentaires, seule la vidéo (avec un bouton pour revenir)
+  /// reste visible, comme dans la référence.
+  Widget _buildReelVideoStack(BuildContext context, RecipeModel recipe) {
+    return GestureDetector(
+      onTap: _showComments ? () => setState(() => _showComments = false) : null,
+      child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  RecipeVideoPlayer(
+                    key: _videoPlayerKey,
+                    videoPath: recipe.videoUrl!,
+                    fullscreenCover: true,
+                  ),
+
+                  if (!_showComments) ...[
+                  Positioned(
+                    top: 0,
+                    left: 0,
+                    right: 0,
+                    height: 120,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.black.withValues(alpha: 0.55),
+                              Colors.transparent,
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    height: 260,
+                    child: IgnorePointer(
+                      child: DecoratedBox(
+                        decoration: BoxDecoration(
+                          gradient: LinearGradient(
+                            begin: Alignment.topCenter,
+                            end: Alignment.bottomCenter,
+                            colors: [
+                              Colors.transparent,
+                              Colors.black.withValues(alpha: 0.75),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+
+                  // Retour + menu (en haut à gauche).
+                  Positioned(
+                    top: 8,
+                    left: 8,
+                    child: _CircleIconButton(
+                      icon: Icons.arrow_back,
+                      onTap: () => Navigator.of(context).pop(),
+                    ),
+                  ),
+                  Positioned(
+                    top: 8,
+                    left: 52,
+                    child: Builder(
+                      builder: (context) => _CircleIconButton(
+                        icon: Icons.menu,
+                        onTap: () => Scaffold.of(context).openDrawer(),
+                      ),
+                    ),
+                  ),
+
+                  // Colonne d'actions à droite (façon Reels).
+                  Positioned(
+                    right: 10,
+                    bottom: 110,
+                    child: Column(
+                      children: [
+                        if (recipe.authorId != null)
+                          _ReelAction(
+                            child: CircleAvatar(
+                              radius: 22,
+                              backgroundColor: Colors.white,
+                              child: Icon(
+                                Icons.person,
+                                color: Colors.black.withValues(alpha: 0.6),
+                              ),
+                            ),
+                            onTap: () {
+                              final currentUserId =
+                                  Supabase.instance.client.auth.currentUser?.id;
+                              final isOwnRecipe =
+                                  currentUserId == recipe.authorId;
+
+                              Navigator.of(context).push(
+                                MaterialPageRoute(
+                                  builder: (context) => isOwnRecipe
+                                      ? const MyProfileViewPage()
+                                      : CreatorProfilePage(
+                                          authorId: recipe.authorId!,
+                                        ),
+                                ),
+                              );
+                            },
+                          ),
+                        const SizedBox(height: 22),
+                        _ReelAction(
+                          icon: _isLiked
+                              ? Icons.favorite
+                              : Icons.favorite_border,
+                          iconColor: _isLiked ? Colors.red : Colors.white,
+                          label: '$_likeCount',
+                          onTap: _isLikeLoading ? null : _toggleLike,
+                        ),
+                        const SizedBox(height: 22),
+                        FutureBuilder<List<Map<String, dynamic>>>(
+                          future: _commentsFuture,
+                          builder: (context, snapshot) {
+                            final count = snapshot.data?.length ?? 0;
+
+                            return _ReelAction(
+                              icon: Icons.chat_bubble_outline,
+                              label: '$count',
+                              onTap: () =>
+                                  setState(() => _showComments = true),
+                            );
+                          },
+                        ),
+                        const SizedBox(height: 22),
+                        _ReelAction(
+                          icon: Icons.shopping_basket_outlined,
+                          label: 'Ingrédients',
+                          onTap: _showIngredientsSheet,
+                        ),
+                        const SizedBox(height: 22),
+                        _ReelAction(
+                          icon: Icons.calendar_month_outlined,
+                          label: 'Planifier',
+                          onTap: _showAddToPlanSheet,
+                        ),
+                        const SizedBox(height: 22),
+                        _ReelAction(
+                          icon: Icons.soup_kitchen_outlined,
+                          label: 'Cuisiner',
+                          onTap: _openCookingMode,
+                        ),
+                        const SizedBox(height: 22),
+                        _ReelAction(
+                          icon: Icons.share_outlined,
+                          label: 'Partager',
+                          onTap: () => _showComingSoon('Le partage'),
+                        ),
+                      ],
+                    ),
+                  ),
+
+                  // Titre / auteur / description en bas à gauche.
+                  Positioned(
+                    left: 16,
+                    right: 90,
+                    bottom: 24,
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      mainAxisSize: MainAxisSize.min,
+                      children: [
+                        if (_authorName != null)
+                          Text(
+                            _authorName!,
+                            style: const TextStyle(
+                              color: Colors.white,
+                              fontWeight: FontWeight.w700,
+                              fontSize: 13,
+                            ),
+                          ),
+                        if (!_isRatingLoading) ...[
+                          const SizedBox(height: 4),
+                          InkWell(
+                            onTap: _showRatingSheet,
+                            child: Row(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Icon(
+                                  _myRating != null
+                                      ? Icons.star
+                                      : Icons.star_border,
+                                  size: 14,
+                                  color: Colors.amber,
+                                ),
+                                const SizedBox(width: 4),
+                                Text(
+                                  _ratingCount == 0
+                                      ? 'Pas encore noté — donne ton avis'
+                                      : '${_averageRating.toStringAsFixed(1)} '
+                                          '($_ratingCount avis)',
+                                  style: const TextStyle(
+                                    color: Colors.white,
+                                    fontSize: 12,
+                                    decoration: TextDecoration.underline,
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                        const SizedBox(height: 6),
+                        Text(
+                          recipe.title,
+                          style: const TextStyle(
+                            color: Colors.white,
+                            fontWeight: FontWeight.bold,
+                            fontSize: 18,
+                          ),
+                        ),
+                        if (recipe.description != null &&
+                            recipe.description!.trim().isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            recipe.description!,
+                            maxLines: 2,
+                            overflow: TextOverflow.ellipsis,
+                            style: TextStyle(
+                              color: Colors.white.withValues(alpha: 0.85),
+                              fontSize: 13,
+                            ),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                ],
+              ],
+            ),
+    );
+  }
+
+  /// Panneau de commentaires façon Instagram : liste des
+  /// commentaires (avatar, nom, texte) + barre de réponse en bas.
+  /// S'affiche pendant que la vidéo est réduite en haut de l'écran.
+  Widget _buildCommentsPanel(BuildContext context) {
+    return Container(
+      color: Theme.of(context).scaffoldBackgroundColor,
+      child: Column(
+        children: [
+          const SizedBox(height: 8),
+          Container(
+            width: 40,
+            height: 4,
+            decoration: BoxDecoration(
+              color: Theme.of(context).colorScheme.outline,
+              borderRadius: BorderRadius.circular(2),
+            ),
+          ),
+          Expanded(
+            child: FutureBuilder<List<Map<String, dynamic>>>(
+              future: _commentsFuture,
+              builder: (context, snapshot) {
+                if (snapshot.connectionState == ConnectionState.waiting) {
+                  return const Center(child: CircularProgressIndicator());
+                }
+
+                if (snapshot.hasError) {
+                  return Center(
+                    child: Text(
+                      'Impossible de charger les commentaires : '
+                      '${snapshot.error}',
+                    ),
+                  );
+                }
+
+                final comments = (snapshot.data ?? [])
+                    .where((comment) => comment['is_hidden'] != true)
+                    .toList();
+
+                if (comments.isEmpty) {
+                  return const Center(
+                    child: Padding(
+                      padding: EdgeInsets.all(24),
+                      child: Text(
+                        'Aucun commentaire pour l’instant. '
+                        'Sois le premier à en laisser un !',
+                        textAlign: TextAlign.center,
+                      ),
+                    ),
+                  );
+                }
+
+                return ListView.builder(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 16,
+                    vertical: 8,
+                  ),
+                  itemCount: comments.length,
+                  itemBuilder: (context, index) {
+                    final comment = comments[index];
+
+                    return Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 10),
+                      child: Row(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          CircleAvatar(
+                            radius: 16,
+                            backgroundColor: Theme.of(context)
+                                .colorScheme
+                                .surfaceContainerHighest,
+                            child: const Icon(Icons.person, size: 16),
+                          ),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
+                                Text(
+                                  _commentAuthorName(comment),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.w700,
+                                    fontSize: 13,
+                                  ),
+                                ),
+                                const SizedBox(height: 2),
+                                Text(
+                                  comment['content']?.toString() ?? '',
+                                  style: const TextStyle(fontSize: 13),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ),
+          SafeArea(
+            top: false,
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 12),
+              child: Row(
+                children: [
+                  Expanded(
+                    child: TextField(
+                      controller: _commentController,
+                      decoration: const InputDecoration(
+                        hintText: 'Ajoutez un commentaire...',
+                        border: OutlineInputBorder(
+                          borderRadius: BorderRadius.all(
+                            Radius.circular(24),
+                          ),
+                        ),
+                        isDense: true,
+                        contentPadding: EdgeInsets.symmetric(
+                          horizontal: 16,
+                          vertical: 12,
+                        ),
+                      ),
+                      minLines: 1,
+                      maxLines: 3,
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  IconButton(
+                    onPressed: _isSubmittingComment ? null : _submitComment,
+                    icon: _isSubmittingComment
+                        ? const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : const Icon(Icons.send),
+                  ),
+                ],
+              ),
+            ),
+          ),
         ],
       ),
     );
@@ -1408,10 +1625,6 @@ class _CircleIconButton extends StatelessWidget {
 }
 
 // ============================================================
-// ACTION RAPIDE (Planifier / Cuisiner / Courses)
-// ============================================================
-
-// ============================================================
 // ACTION DE LA COLONNE REEL (icône ou avatar + libellé optionnel)
 // ============================================================
 
@@ -1459,6 +1672,10 @@ class _ReelAction extends StatelessWidget {
     );
   }
 }
+
+// ============================================================
+// ACTION RAPIDE (Planifier / Cuisiner / Courses)
+// ============================================================
 
 class _QuickAction extends StatelessWidget {
   final IconData icon;

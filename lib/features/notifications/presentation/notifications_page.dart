@@ -119,6 +119,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
       );
     } else if (type == 'creator_approved') {
       Navigator.of(context).pushNamed('/my-profile');
+    }else if (type == 'creator_approved' || type == 'creator_rejected') {
+      Navigator.of(context).pushNamed('/my-profile');
     }
   }
 
@@ -130,6 +132,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.person_add_alt_1_outlined;
       case 'creator_approved':
         return Icons.workspace_premium_outlined;
+      case 'creator_rejected':
+        return Icons.info_outline;
       default:
         return Icons.notifications_outlined;
     }
