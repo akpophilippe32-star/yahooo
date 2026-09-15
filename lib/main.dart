@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:device_preview/device_preview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
@@ -58,10 +60,40 @@ class AppScrollBehavior extends MaterialScrollBehavior {
       };
 }
 
-class MealoraApp extends StatelessWidget {
+class MealoraApp extends StatefulWidget {
   final String initialRoute;
 
   const MealoraApp({super.key, this.initialRoute = '/'});
+
+  @override
+  State<MealoraApp> createState() => _MealoraAppState();
+}
+
+class _MealoraAppState extends State<MealoraApp> {
+  final _navigatorKey = GlobalKey<NavigatorState>();
+  StreamSubscription<AuthState>? _authSubscription;
+
+  @override
+  void initState() {
+    super.initState();
+
+    // Quand l'utilisateur ouvre le lien reçu par email ("mot de
+    // passe oublié"), Supabase détecte automatiquement le jeton de
+    // récupération et déclenche cet événement — peu importe où on
+    // se trouve dans l'app à ce moment-là.
+    _authSubscription =
+        Supabase.instance.client.auth.onAuthStateChange.listen((data) {
+      if (data.event == AuthChangeEvent.passwordRecovery) {
+        _navigatorKey.currentState?.pushNamed('/reset-password');
+      }
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
 
   @override
   Widget build(BuildContext context) {
@@ -72,6 +104,7 @@ class MealoraApp extends StatelessWidget {
       listenable: ThemeController.instance,
       builder: (context, _) {
         return MaterialApp(
+          navigatorKey: _navigatorKey,
           debugShowCheckedModeBanner: false,
           title: 'Mealora',
           theme: AppTheme.lightTheme,
@@ -86,7 +119,7 @@ class MealoraApp extends StatelessWidget {
           // Corrige le scroll à la souris dans la simulation Chrome.
           scrollBehavior: AppScrollBehavior(),
 
-          initialRoute: initialRoute,
+          initialRoute: widget.initialRoute,
 
           onGenerateRoute: AppRouter.generateRoute,
         );

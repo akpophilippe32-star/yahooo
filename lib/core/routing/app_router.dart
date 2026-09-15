@@ -6,12 +6,15 @@ import '../../features/auth/presentation/profile_page.dart';
 import '../../features/auth/presentation/my_profile_view_page.dart';
 import '../../features/recipes/presentation/favorites_page.dart';
 import '../../features/auth/presentation/edit_profile_page.dart';
+import '../../features/auth/presentation/forgot_password_page.dart';
+import '../../features/auth/presentation/reset_password_page.dart';
 import '../../features/notifications/presentation/notifications_page.dart';
 import '../app_shell.dart';
 import '../../features/auth/presentation/welcome_page.dart';
 import '../../features/recipes/presentation/create_recipe_page.dart';
 import '../../features/recipes/presentation/create_video_recipe_page.dart';
 import '../../pages/creator/my_recipes_page.dart';
+import '../../features/auth/presentation/complete_profile_page.dart';
 class AppRouter {
   static Route<dynamic> generateRoute(RouteSettings settings) {
     switch (settings.name) {
@@ -63,10 +66,23 @@ class AppRouter {
         return MaterialPageRoute(
           builder: (_) => const EditProfilePage(),
         );
+        case '/forgot-password':
+        return MaterialPageRoute(
+          builder: (_) => const ForgotPasswordPage(),
+        );
+        case '/reset-password':
+        return MaterialPageRoute(
+          builder: (_) => const ResetPasswordPage(),
+        );
         case '/notifications':
         return MaterialPageRoute(
           builder: (_) => const NotificationsPage(),
         );
+        case '/complete-profile':
+        return MaterialPageRoute(
+          builder: (_) => const CompleteProfilePage(),
+        );
+        
       default:
         return MaterialPageRoute(
           builder: (_) => const WelcomePage(),

@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 class AuthRepository {
@@ -73,4 +74,81 @@ class AuthRepository {
   }
 
   User? get currentUser => _supabase.auth.currentUser;
+
+  // ============================================================
+  // CONNEXION GOOGLE
+  // ============================================================
+
+  /// Lance le flux de connexion Google. Sur le web, redirige la
+  /// page elle-même ; sur mobile, ouvre le navigateur système puis
+  /// revient dans l'app via le lien profond `io.supabase.mealora://`
+  /// (le même que pour la récupération de mot de passe).
+  ///
+  /// Ne renvoie rien directement : le résultat (connecté ou non)
+  /// arrive ensuite via `onAuthStateChange`, à écouter côté appelant.
+  Future<void> signInWithGoogle() async {
+    await _supabase.auth.signInWithOAuth(
+      OAuthProvider.google,
+      redirectTo: kIsWeb ? null : 'io.supabase.mealora://login-callback',
+      // Sans ça, Google reconnecte automatiquement avec le dernier
+      // compte utilisé dans ce navigateur, sans jamais proposer de
+      // choisir — gênant si on a plusieurs comptes Google.
+      queryParams: const {'prompt': 'select_account'},
+    );
+  }
+
+  /// Un compte créé via Google n'est jamais passé par l'écran
+  /// d'inscription classique — il n'a donc pas de `username` choisi
+  /// (le trigger de création automatique du profil ne peut pas en
+  /// inventer un). On s'en sert comme signal fiable pour savoir
+  /// s'il faut afficher l'écran de complément de profil.
+  Future<bool> needsProfileCompletion() async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) return false;
+
+    final profile = await _supabase
+        .from('profiles')
+        .select('username')
+        .eq('id', user.id)
+        .maybeSingle();
+
+    final username = profile?['username'] as String?;
+    return username == null || username.trim().isEmpty;
+  }
+
+  /// Définit le nom d'utilisateur pour un compte qui n'en a pas
+  /// encore (typiquement après une première connexion Google).
+  Future<void> completeUsername(String username) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) throw Exception('Utilisateur non connecté.');
+
+    await _supabase
+        .from('profiles')
+        .update({'username': username})
+        .eq('id', user.id);
+  }
+
+  // ============================================================
+  // MOT DE PASSE OUBLIÉ
+  // ============================================================
+
+  /// Envoie un email de réinitialisation contenant un lien qui
+  /// rouvre l'application (deep link sur mobile, même page sur le
+  /// web) avec une session de récupération active.
+  Future<void> sendPasswordResetEmail(String email) async {
+    await _supabase.auth.resetPasswordForEmail(
+      email,
+      redirectTo:
+          kIsWeb ? Uri.base.origin : 'io.supabase.mealora://login-callback',
+    );
+  }
+
+  /// Définit un nouveau mot de passe — à appeler uniquement une
+  /// fois qu'une session de récupération est active (après avoir
+  /// cliqué sur le lien reçu par email).
+  Future<void> updatePassword(String newPassword) async {
+    await _supabase.auth.updateUser(
+      UserAttributes(password: newPassword),
+    );
+  }
 }

@@ -1,6 +1,11 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:supabase_flutter/supabase_flutter.dart';
 
 import '../../../widgets/torn_edge_clipper.dart';
+import '../data/auth_repository.dart';
+import '../../../widgets/google_logo.dart';
 
 /// Écran d'accueil — réplique fidèle de la maquette de référence
 /// fournie (structure, doodles, dispersion des photos, couleurs).
@@ -13,8 +18,17 @@ import '../../../widgets/torn_edge_clipper.dart';
 ///
 /// Photos temporaires libres de droits (licence Unsplash, pas
 /// d'attribution requise) en attendant de vraies photos pour Mealora.
-class WelcomePage extends StatelessWidget {
+class WelcomePage extends StatefulWidget {
   const WelcomePage({super.key});
+
+  @override
+  State<WelcomePage> createState() => _WelcomePageState();
+}
+
+class _WelcomePageState extends State<WelcomePage> {
+  final _authRepository = AuthRepository();
+  StreamSubscription<AuthState>? _authSubscription;
+  bool _isSigningInWithGoogle = false;
 
   static const Color _green = Color(0xFF3D8B40);
   static const Color _orange = Color(0xFFF2851E);
@@ -29,12 +43,56 @@ class WelcomePage extends StatelessWidget {
       'https://images.unsplash.com/photo-1512621776951-a57141f2eefd'
       '?fm=jpg&q=70&w=800&auto=format&fit=crop';
 
-  void _showComingSoon(BuildContext context, String provider) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(
-        content: Text('Connexion avec $provider — bientôt disponible.'),
-      ),
-    );
+  @override
+  void initState() {
+    super.initState();
+
+    // Le flux Google (redirection web / lien profond mobile) ne
+    // revient pas directement avec un résultat : on écoute plutôt
+    // le changement d'état d'authentification pour savoir quand la
+    // connexion a réellement abouti, et rediriger vers l'accueil.
+    _authSubscription =
+    Supabase.instance.client.auth.onAuthStateChange.listen((data) async {
+      if (data.event != AuthChangeEvent.signedIn || !mounted) return;
+
+      // Un compte Google fraîchement créé n'a pas encore de pseudo
+      // (pas passé par l'inscription classique) — on le fait d'abord
+      // compléter son profil avant d'accéder à l'app.
+      final needsCompletion = await _authRepository.needsProfileCompletion();
+
+      if (!mounted) return;
+
+      Navigator.of(context).pushNamedAndRemoveUntil(
+        needsCompletion ? '/complete-profile' : '/home',
+        (route) => false,
+      );
+    });
+  }
+
+  @override
+  void dispose() {
+    _authSubscription?.cancel();
+    super.dispose();
+  }
+
+  Future<void> _signInWithGoogle(BuildContext context) async {
+    setState(() => _isSigningInWithGoogle = true);
+
+    try {
+      await _authRepository.signInWithGoogle();
+      // La suite se passe via le listener d'état d'authentification
+      // ci-dessus (redirection web ou retour du lien profond).
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Connexion Google impossible : $error'),
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _isSigningInWithGoogle = false);
+    }
   }
 
   @override
@@ -391,8 +449,9 @@ class WelcomePage extends StatelessWidget {
                       SizedBox(
                         height: 48,
                         child: OutlinedButton.icon(
-                          onPressed: () =>
-                              _showComingSoon(context, 'Google'),
+                          onPressed: _isSigningInWithGoogle
+                              ? null
+                              : () => _signInWithGoogle(context),
                           style: OutlinedButton.styleFrom(
                             foregroundColor: const Color(0xFF3A362B),
                             backgroundColor: Colors.white,
@@ -401,7 +460,15 @@ class WelcomePage extends StatelessWidget {
                               borderRadius: BorderRadius.circular(30),
                             ),
                           ),
-                          icon: const Icon(Icons.g_mobiledata, size: 22),
+                          icon: _isSigningInWithGoogle
+                              ? const SizedBox(
+                                  width: 18,
+                                  height: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                  ),
+                                )
+                              : const GoogleLogo(size: 20),
                           label: const Text('Continuer avec Google'),
                         ),
                       ),

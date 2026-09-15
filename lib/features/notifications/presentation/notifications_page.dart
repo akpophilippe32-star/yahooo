@@ -29,10 +29,18 @@ class _NotificationsPageState extends State<NotificationsPage> {
     _load();
   }
 
-  void _load() {
+    void _load() {
     _notificationsFuture = _notificationRepository.getNotifications();
-  }
 
+    // Le simple fait d'ouvrir cet écran vaut "vu" — pas besoin de
+    // taper sur chaque notification une par une pour faire
+    // disparaître le badge. Si une nouvelle notification arrive
+    // après coup, elle sera comptée normalement au prochain calcul
+    // du badge (fait par app_shell.dart au retour sur cet écran).
+    _notificationsFuture.then((_) {
+      _notificationRepository.markAllAsRead();
+    });
+  }
   Future<void> _refresh() async {
     setState(_load);
     await _notificationsFuture;
@@ -71,10 +79,12 @@ class _NotificationsPageState extends State<NotificationsPage> {
   }
 
   Future<void> _openNotification(Map<String, dynamic> notification) async {
+    
     if (notification['is_read'] != true) {
       await _notificationRepository.markAsRead(notification['id'] as int);
       if (mounted) await _refresh();
     }
+    
 
     if (!mounted) return;
 
@@ -101,12 +111,14 @@ class _NotificationsPageState extends State<NotificationsPage> {
           builder: (context) => RecipePublicViewPage(recipe: recipe),
         ),
       );
-    } else if (type == 'new_follower' && userId != null) {
+      } else if (type == 'new_follower' && userId != null) {
       Navigator.of(context).push(
         MaterialPageRoute(
           builder: (context) => CreatorProfilePage(authorId: userId),
         ),
       );
+    } else if (type == 'creator_approved') {
+      Navigator.of(context).pushNamed('/my-profile');
     }
   }
 
@@ -116,6 +128,8 @@ class _NotificationsPageState extends State<NotificationsPage> {
         return Icons.restaurant_menu_outlined;
       case 'new_follower':
         return Icons.person_add_alt_1_outlined;
+      case 'creator_approved':
+        return Icons.workspace_premium_outlined;
       default:
         return Icons.notifications_outlined;
     }
