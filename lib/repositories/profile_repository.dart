@@ -8,6 +8,18 @@ class ProfileRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   // ============================================================
+  // CACHE DES URLS D'AVATAR
+  // ============================================================
+  //
+  // Même principe que pour les images/vidéos de recette : sans
+  // cache, chaque fois qu'un avatar redevient visible après un
+  // défilement, on refaisait un aller-retour réseau complet avant
+  // de pouvoir l'afficher. `static` : partagé par toutes les
+  // instances de ProfileRepository, pour survivre à la navigation.
+  static final Map<String, _CachedUrl> _avatarUrlCache = {};
+  static const Duration _cacheValidity = Duration(minutes: 50);
+
+  // ============================================================
   // LECTURE DU PROFIL
   // ============================================================
 
@@ -66,15 +78,31 @@ class ProfileRepository {
     return path;
   }
 
+  /// Génère une URL temporaire pour un avatar stocké dans le bucket
+  /// privé `avatars`. Mise en cache en mémoire (voir
+  /// [_avatarUrlCache]) pour éviter de refaire l'aller-retour
+  /// réseau à chaque fois qu'une photo redevient visible après un
+  /// défilement (listes d'utilisateurs, commentaires...).
   Future<String?> getAvatarUrl(String? path) async {
     if (path == null || path.trim().isEmpty) {
       return null;
     }
 
+    final trimmedPath = path.trim();
+
+    final cached = _avatarUrlCache[trimmedPath];
+    if (cached != null && !cached.isExpired) {
+      return cached.url;
+    }
+
     try {
-      return await _supabase.storage
+      final signedUrl = await _supabase.storage
           .from('avatars')
-          .createSignedUrl(path.trim(), 60 * 60);
+          .createSignedUrl(trimmedPath, 60 * 60);
+
+      _avatarUrlCache[trimmedPath] = _CachedUrl(signedUrl);
+
+      return signedUrl;
     } catch (error) {
       debugPrint('Erreur avatar [$path] : $error');
       return null;
@@ -104,6 +132,13 @@ class ProfileRepository {
         'p_website': website,
       },
     );
+
+    // La photo vient peut-être de changer : on invalide l'entrée en
+    // cache pour ce chemin, pour ne jamais montrer une ancienne
+    // photo mise en cache après une mise à jour.
+    if (avatarUrl != null) {
+      _avatarUrlCache.remove(avatarUrl.trim());
+    }
   }
 
   // ============================================================
@@ -191,4 +226,16 @@ class ProfileRepository {
       return true;
     }
   }
+}
+
+/// URL signée mise en cache avec son horodatage (voir
+/// [ProfileRepository._cacheValidity]).
+class _CachedUrl {
+  final String url;
+  final DateTime cachedAt;
+
+  _CachedUrl(this.url) : cachedAt = DateTime.now();
+
+  bool get isExpired =>
+      DateTime.now().difference(cachedAt) > ProfileRepository._cacheValidity;
 }

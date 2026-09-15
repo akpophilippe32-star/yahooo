@@ -50,6 +50,7 @@ class HomeTabViewState extends State<HomeTabView> {
     super.initState();
 
     _categoriesFuture = _categoryRepository.getCategories();
+    // Premier chargement : ordre normal (plus récentes d'abord).
     _recipesFuture = _recipeRepository.getPublishedRecipes();
 
     // Défilement automatique du carrousel façon Play Store.
@@ -105,10 +106,18 @@ class HomeTabViewState extends State<HomeTabView> {
   // d'une recette, retour de "Mes recettes", etc.)
   // ============================================================
 
+  /// À chaque actualisation manuelle (glisser vers le bas), l'ordre
+  /// des recettes est mélangé — même s'il n'y a aucune nouvelle
+  /// recette, l'affichage change un peu, comme sur Facebook. Le
+  /// tout premier chargement (`initState`) reste, lui, dans l'ordre
+  /// normal (plus récentes en premier).
   Future<void> refresh() async {
     setState(() {
       _categoriesFuture = _categoryRepository.getCategories();
-      _recipesFuture = _recipeRepository.getPublishedRecipes();
+      _recipesFuture = _recipeRepository.getPublishedRecipes().then((list) {
+        list.shuffle();
+        return list;
+      });
     });
 
     try {

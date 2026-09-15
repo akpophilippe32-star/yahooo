@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
 import 'app_drawer.dart';
@@ -135,6 +136,25 @@ class _AppShellPageState extends State<AppShellPage> {
     setState(() => _currentIndex = index);
   }
 
+  // ============================================================
+  // BOUTON RETOUR (matériel/geste Android)
+  // ============================================================
+  //
+  // Sans ça, appuyer sur retour depuis l'Accueil pouvait révéler
+  // l'écran de bienvenue/inscription resté dans la pile de
+  // navigation (selon le chemin emprunté pour arriver ici). On
+  // intercepte systématiquement : sur un autre onglet, retour à
+  // l'Accueil ; sur l'Accueil, on quitte l'app — comme la plupart
+  // des apps Android — sans jamais retomber sur un écran
+  // d'authentification.
+  void _handleBackButton() {
+    if (_currentIndex != 0) {
+      _selectTab(0);
+    } else {
+      SystemNavigator.pop();
+    }
+  }
+
   Widget _buildHeaderTrailingIcon() {
     switch (_currentIndex) {
       case 1: // Recherche/Recettes
@@ -254,123 +274,133 @@ class _AppShellPageState extends State<AppShellPage> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      drawer: const AppDrawer(),
-      body: SafeArea(
-        bottom: false,
-        child: Column(
-          children: [
-            // ====================================================
-            // EN-TÊTE PERSISTANT
-            // ====================================================
+    return PopScope(
+      canPop: false,
+      onPopInvokedWithResult: (didPop, result) {
+        if (didPop) return;
+        _handleBackButton();
+      },
+      child: Scaffold(
+        drawer: const AppDrawer(),
+        body: SafeArea(
+          bottom: false,
+          child: Column(
+            children: [
+              // ====================================================
+              // EN-TÊTE PERSISTANT
+              // ====================================================
 
-            Padding(
-              padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
-              child: Row(
-                children: [
-                  Builder(
-                    builder: (context) => IconButton(
-                      onPressed: () => Scaffold.of(context).openDrawer(),
-                      icon: const Icon(Icons.menu),
+              Padding(
+                padding: const EdgeInsets.fromLTRB(16, 12, 16, 8),
+                child: Row(
+                  children: [
+                    Builder(
+                      builder: (context) => IconButton(
+                        onPressed: () => Scaffold.of(context).openDrawer(),
+                        icon: const Icon(Icons.menu),
+                      ),
                     ),
-                  ),
-                  const Expanded(
-                    child: Text(
-                      'Mealora',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(fontSize: 20, fontWeight: FontWeight.w800),
+                    const Expanded(
+                      child: Text(
+                        'Mealora',
+                        textAlign: TextAlign.center,
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                        ),
+                      ),
                     ),
-                  ),
-                  _buildHeaderTrailingIcon(),
-                ],
+                    _buildHeaderTrailingIcon(),
+                  ],
+                ),
               ),
-            ),
 
-            // ====================================================
-            // CONTENU DE L'ONGLET SÉLECTIONNÉ
-            // ====================================================
+              // ====================================================
+              // CONTENU DE L'ONGLET SÉLECTIONNÉ
+              // ====================================================
 
-            Expanded(
-              child: IndexedStack(
-                index: _currentIndex,
-                children: _tabs,
+              Expanded(
+                child: IndexedStack(
+                  index: _currentIndex,
+                  children: _tabs,
+                ),
               ),
-            ),
-          ],
-        ),
-      ),
-
-      floatingActionButton: Container(
-        width: 56,
-        height: 56,
-        decoration: BoxDecoration(
-          shape: BoxShape.circle,
-          gradient: LinearGradient(
-            begin: Alignment.topLeft,
-            end: Alignment.bottomRight,
-            colors: [
-              Theme.of(context).colorScheme.primary,
-              Theme.of(context).colorScheme.secondary,
             ],
           ),
-          boxShadow: [
-            BoxShadow(
-              color: Theme.of(context).colorScheme.primary.withValues(
-                    alpha: 0.4,
-                  ),
-              blurRadius: 14,
-              offset: const Offset(0, 4),
-            ),
-          ],
         ),
-        child: Material(
-          color: Colors.transparent,
-          shape: const CircleBorder(),
-          child: InkWell(
-            customBorder: const CircleBorder(),
-            onTap: _openCreateMenu,
-            child: const Icon(Icons.add, color: Colors.white, size: 26),
+
+        floatingActionButton: Container(
+          width: 56,
+          height: 56,
+          decoration: BoxDecoration(
+            shape: BoxShape.circle,
+            gradient: LinearGradient(
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+              colors: [
+                Theme.of(context).colorScheme.primary,
+                Theme.of(context).colorScheme.secondary,
+              ],
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Theme.of(context).colorScheme.primary.withValues(
+                      alpha: 0.4,
+                    ),
+                blurRadius: 14,
+                offset: const Offset(0, 4),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            shape: const CircleBorder(),
+            child: InkWell(
+              customBorder: const CircleBorder(),
+              onTap: _openCreateMenu,
+              child: const Icon(Icons.add, color: Colors.white, size: 26),
+            ),
           ),
         ),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
+        floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
 
-      bottomNavigationBar: BottomAppBar(
-        height: 56,
-        color: Theme.of(context).scaffoldBackgroundColor,
-        shape: const CircularNotchedRectangle(),
-        notchMargin: 6,
-        elevation: 8,
-        padding: const EdgeInsets.symmetric(vertical: 0),
-        child: Row(
-          mainAxisAlignment: MainAxisAlignment.spaceAround,
-          children: [
-            _NavItem(
-              icon: Icons.home_rounded,
-              label: 'Accueil',
-              isActive: _currentIndex == 0,
-              onTap: () => _selectTab(0),
-            ),
-            _NavItem(
-              icon: Icons.search_rounded,
-              label: 'Recettes',
-              isActive: _currentIndex == 1,
-              onTap: () => _selectTab(1),
-            ),
-            const SizedBox(width: 40),
-            _NavItem(
-              icon: Icons.calendar_month_rounded,
-              label: 'Plan',
-              isActive: _currentIndex == 2,
-              onTap: () => _selectTab(2),
-            ),
-            _NavItem(
-              icon: Icons.shopping_bag_outlined,
-              label: 'Courses',
-              isActive: _currentIndex == 3,
-              onTap: () => _selectTab(3),
-            ),
-          ],
+        bottomNavigationBar: BottomAppBar(
+          height: 56,
+          color: Theme.of(context).scaffoldBackgroundColor,
+          shape: const CircularNotchedRectangle(),
+          notchMargin: 6,
+          elevation: 8,
+          padding: const EdgeInsets.symmetric(vertical: 0),
+          child: Row(
+            mainAxisAlignment: MainAxisAlignment.spaceAround,
+            children: [
+              _NavItem(
+                icon: Icons.home_rounded,
+                label: 'Accueil',
+                isActive: _currentIndex == 0,
+                onTap: () => _selectTab(0),
+              ),
+              _NavItem(
+                icon: Icons.search_rounded,
+                label: 'Recettes',
+                isActive: _currentIndex == 1,
+                onTap: () => _selectTab(1),
+              ),
+              const SizedBox(width: 40),
+              _NavItem(
+                icon: Icons.calendar_month_rounded,
+                label: 'Plan',
+                isActive: _currentIndex == 2,
+                onTap: () => _selectTab(2),
+              ),
+              _NavItem(
+                icon: Icons.shopping_bag_outlined,
+                label: 'Courses',
+                isActive: _currentIndex == 3,
+                onTap: () => _selectTab(3),
+              ),
+            ],
+          ),
         ),
       ),
     );

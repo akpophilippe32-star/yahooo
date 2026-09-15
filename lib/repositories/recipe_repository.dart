@@ -7,6 +7,23 @@ class RecipeRepository {
   final SupabaseClient _supabase = Supabase.instance.client;
 
   // ============================================================
+  // CACHE DES URLS SIGNÉES (image/vidéo)
+  // ============================================================
+  //
+  // `static` : partagé par TOUTES les instances de RecipeRepository
+  // (on en crée une nouvelle à chaque écran), pour que le cache
+  // survive à la navigation. Sans ça, chaque fois qu'une miniature
+  // redevient visible après un défilement (le widget qui l'affiche
+  // est reconstruit), on refaisait un aller-retour réseau complet
+  // avant de pouvoir l'afficher — d'où le temps d'attente et le
+  // "clignotement" observés. Les URLs signées restent valables 1h
+  // côté Supabase ; on les garde 50 minutes ici par sécurité, pour
+  // ne jamais servir une URL qui vient d'expirer.
+  static final Map<String, _CachedUrl> _imageUrlCache = {};
+  static final Map<String, _CachedUrl> _videoUrlCache = {};
+  static const Duration _cacheValidity = Duration(minutes: 50);
+
+  // ============================================================
   // RECETTES PUBLIÉES
   // ============================================================
 
@@ -436,10 +453,6 @@ class RecipeRepository {
   Future<Map<String, dynamic>> getRecipeDetails(
     int recipeId,
   ) async {
-    // ============================================================
-    // 1. RECETTE
-    // ============================================================
-
     final recipeResponse = await _supabase
         .from('recipes')
         .select('''
@@ -487,10 +500,6 @@ class RecipeRepository {
 
     final recipe = RecipeModel.fromMap(recipeData);
 
-    // ============================================================
-    // 2. INGRÉDIENTS
-    // ============================================================
-
     final ingredientsResponse = await _supabase
         .from('recipe_ingredients')
         .select('''
@@ -515,10 +524,6 @@ class RecipeRepository {
         (ingredientsResponse as List).map((ingredient) {
       return Map<String, dynamic>.from(ingredient);
     }).toList();
-
-    // ============================================================
-    // 3. ÉTAPES
-    // ============================================================
 
     final stepsResponse = await _supabase
         .from('recipe_steps')
@@ -662,7 +667,7 @@ class RecipeRepository {
         .toList();
   }
 
-    // ============================================================
+  // ============================================================
   // ÉTAPES DE LA RECETTE
   // ============================================================
 
@@ -838,8 +843,6 @@ class RecipeRepository {
       );
     }
 
-    // Vérification que la recette appartient bien
-    // à l'utilisateur connecté.
     final recipe = await _supabase
         .from('recipes')
         .select('id')
@@ -902,8 +905,6 @@ class RecipeRepository {
       );
     }
 
-    // On récupère d'abord la ligne afin de vérifier
-    // que la recette appartient bien au Creator connecté.
     final existing = await _supabase
         .from('recipe_ingredients')
         .select('''
@@ -994,7 +995,6 @@ class RecipeRepository {
       );
     }
 
-    // On récupère la recette associée.
     final existing = await _supabase
         .from('recipe_ingredients')
         .select('recipe_id')
@@ -1009,7 +1009,6 @@ class RecipeRepository {
 
     final recipeId = existing['recipe_id'];
 
-    // Vérification de propriété de la recette.
     final recipe = await _supabase
         .from('recipes')
         .select('id')
@@ -1036,10 +1035,6 @@ class RecipeRepository {
   /// Envoie une image dans le bucket privé `recipe-images` et
   /// retourne le CHEMIN de stockage (comme pour la vidéo, il faudra
   /// passer par [getRecipeImageUrl] pour l'afficher).
-  ///
-  /// Utilisable AVANT même que la recette existe (upload d'abord,
-  /// puis le chemin retourné est passé à `createDraft(imageUrl: ...)`
-  /// ou `updateRecipe(imageUrl: ...)`).
   Future<String> uploadRecipeImage({
     required Uint8List bytes,
     required String fileExtension,
@@ -1063,7 +1058,10 @@ class RecipeRepository {
   }
 
   /// Génère une URL temporaire pour une image stockée
-  /// dans le bucket privé `recipe-images`.
+  /// dans le bucket privé `recipe-images`. Mise en cache en
+  /// mémoire (voir [_imageUrlCache]) pour éviter de refaire
+  /// l'aller-retour réseau à chaque fois qu'une miniature redevient
+  /// visible après un défilement.
   Future<String?> getRecipeImageUrl(
     String? imagePath,
   ) async {
@@ -1072,15 +1070,22 @@ class RecipeRepository {
       return null;
     }
 
-    try {
-      final path = imagePath.trim();
+    final path = imagePath.trim();
 
+    final cached = _imageUrlCache[path];
+    if (cached != null && !cached.isExpired) {
+      return cached.url;
+    }
+
+    try {
       final signedUrl = await _supabase.storage
           .from('recipe-images')
           .createSignedUrl(
             path,
             60 * 60,
           );
+
+      _imageUrlCache[path] = _CachedUrl(signedUrl);
 
       return signedUrl;
     } catch (error) {
@@ -1091,12 +1096,11 @@ class RecipeRepository {
       return null;
     }
   }
-    // ============================================================
+
+  // ============================================================
   // ÉTAPES DE PRÉPARATION
   // ============================================================
 
-  /// Récupère toutes les étapes d'une recette.
- 
   /// Modifie une étape de préparation.
   Future<void> updateRecipeStep({
     required int stepId,
@@ -1110,7 +1114,6 @@ class RecipeRepository {
       );
     }
 
-    // Récupérer la recette associée à l'étape.
     final existing = await _supabase
         .from('recipe_steps')
         .select('recipe_id')
@@ -1125,8 +1128,6 @@ class RecipeRepository {
 
     final recipeId = existing['recipe_id'];
 
-    // Vérifier que la recette appartient bien
-    // à l'utilisateur connecté.
     final recipe = await _supabase
         .from('recipes')
         .select('id')
@@ -1160,7 +1161,6 @@ class RecipeRepository {
       );
     }
 
-    // Récupérer la recette associée à l'étape.
     final existing = await _supabase
         .from('recipe_steps')
         .select('recipe_id')
@@ -1175,8 +1175,6 @@ class RecipeRepository {
 
     final recipeId = existing['recipe_id'];
 
-    // Vérifier que la recette appartient bien
-    // à l'utilisateur connecté.
     final recipe = await _supabase
         .from('recipes')
         .select('id')
@@ -1220,13 +1218,6 @@ class RecipeRepository {
 
   /// Vérifie que les informations obligatoires d'une recette sont
   /// bien renseignées.
-  ///
-  /// Retourne la liste des champs manquants, sous forme de libellés
-  /// lisibles (ex. "Catégorie", "Au moins un ingrédient"...).
-  /// Une liste vide signifie que la recette peut être publiée.
-  ///
-  /// Champs actuellement obligatoires : titre, catégorie, difficulté,
-  /// au moins un ingrédient, au moins une étape de préparation.
   Future<List<String>> getMissingFieldsForPublish(
     int recipeId,
   ) async {
@@ -1256,9 +1247,6 @@ class RecipeRepository {
 
     final sourceType = recipe['source_type'] as String? ?? 'manual';
 
-    // Pour une recette vidéo, la vidéo EST le contenu principal :
-    // lister des ingrédients/étapes reste possible mais n'est pas
-    // obligatoire pour publier.
     if (sourceType != 'video') {
       final ingredientsResponse = await _supabase
           .from('recipe_ingredients')
@@ -1287,11 +1275,6 @@ class RecipeRepository {
   // ============================================================
 
   /// Fait passer une recette du statut `draft` à `published`.
-  ///
-  /// Vérifie que la recette appartient bien à l'utilisateur connecté
-  /// et que toutes les informations obligatoires sont renseignées
-  /// (voir [getMissingFieldsForPublish]). Lève une [Exception] avec
-  /// un message listant les champs manquants si ce n'est pas le cas.
   Future<void> publishRecipe(int recipeId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1301,7 +1284,6 @@ class RecipeRepository {
       );
     }
 
-    // Vérification de propriété de la recette.
     final recipe = await _supabase
         .from('recipes')
         .select('id, status')
@@ -1316,11 +1298,9 @@ class RecipeRepository {
     }
 
     if (recipe['status'] == 'published') {
-      // Déjà publiée : rien à faire.
       return;
     }
 
-    // Vérification des informations obligatoires.
     final missingFields = await getMissingFieldsForPublish(
       recipeId,
     );
@@ -1343,11 +1323,6 @@ class RecipeRepository {
         .eq('author_id', user.id)
         .select('id, status');
 
-    // Si RLS bloque la mise à jour (ex. rôle différent de
-    // "creator"/"admin"), Supabase ne renvoie aucune ligne et ne
-    // lève AUCUNE exception par défaut. On vérifie donc nous-mêmes
-    // qu'une ligne a bien été modifiée, pour ne jamais échouer
-    // silencieusement.
     if ((updateResponse as List).isEmpty) {
       throw Exception(
         'La publication a été refusée par le serveur '
@@ -1360,11 +1335,7 @@ class RecipeRepository {
   // SUPPRESSION D'UNE RECETTE
   // ============================================================
 
-  /// Supprime définitivement une recette (brouillon, publiée ou
-  /// archivée) — utilisé notamment pour nettoyer les brouillons non
-  /// aboutis. Irréversible : ingrédients, étapes, likes,
-  /// commentaires et notes associés partent avec (contraintes
-  /// ON DELETE CASCADE en base).
+  /// Supprime définitivement une recette.
   Future<void> deleteRecipe(int recipeId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1391,12 +1362,6 @@ class RecipeRepository {
   // VIDÉO — IMPORT ET CRÉATION DE RECETTE VIDÉO
   // ============================================================
 
-  /// Envoie une vidéo dans le bucket privé `recipe-videos` et
-  /// retourne le CHEMIN de stockage (pas une URL publique — le
-  /// bucket est privé, comme pour les images).
-  /// Déduit le type MIME vidéo à partir de l'extension du fichier,
-  /// nécessaire pour que le navigateur (Flutter Web) sache lire le
-  /// fichier comme une vidéo plutôt que comme un binaire générique.
   String _videoMimeType(String fileExtension) {
     switch (fileExtension.toLowerCase()) {
       case 'mp4':
@@ -1443,26 +1408,31 @@ class RecipeRepository {
 
   /// Génère une URL signée temporaire pour lire une vidéo stockée
   /// dans le bucket privé `recipe-videos`. Retourne `null` si aucun
-  /// chemin n'est fourni.
+  /// chemin n'est fourni. Mise en cache en mémoire (voir
+  /// [_videoUrlCache]) — sans ça, chaque miniature vidéo qui
+  /// redevient visible après un défilement refaisait tout le
+  /// travail (aller-retour réseau + réinitialisation du lecteur)
+  /// depuis zéro.
   Future<String?> getRecipeVideoUrl(String? videoPath) async {
     if (videoPath == null || videoPath.isEmpty) {
       return null;
+    }
+
+    final cached = _videoUrlCache[videoPath];
+    if (cached != null && !cached.isExpired) {
+      return cached.url;
     }
 
     final signedUrl = await _supabase.storage
         .from('recipe-videos')
         .createSignedUrl(videoPath, 3600);
 
+    _videoUrlCache[videoPath] = _CachedUrl(signedUrl);
+
     return signedUrl;
   }
 
   /// Crée une recette en brouillon à partir d'une vidéo importée.
-  ///
-  /// Réutilise le RPC `create_recipe_draft` existant (titre,
-  /// description, catégorie...), puis associe la vidéo via une
-  /// mise à jour classique — le RPC actuel ne connaît pas encore
-  /// les colonnes `source_type` / `video_url`, donc on complète
-  /// juste après au lieu de modifier le RPC en base.
   Future<Map<String, dynamic>> createVideoDraft({
     required String title,
     required String videoPath,
@@ -1515,17 +1485,7 @@ class RecipeRepository {
   // ============================================================
   // VIDÉO — ANALYSE IA (optionnelle)
   // ============================================================
-  //
-  // L'analyse elle-même (transcription + extraction IA) n'est pas
-  // faite ici : elle sera déclenchée côté serveur (Supabase Edge
-  // Function), pour ne jamais exposer de clé IA dans l'app. Ces
-  // méthodes ne font qu'enregistrer/consulter l'état de la demande.
-  // Le créateur reste toujours celui qui valide/complète les
-  // ingrédients et étapes finales — l'IA ne fait jamais rien de
-  // manière automatique.
 
-  /// Enregistre une demande d'analyse IA pour la vidéo d'une
-  /// recette. Retourne l'identifiant de la demande créée.
   Future<int> requestVideoAnalysis(int recipeId) async {
     final response = await _supabase
         .from('recipe_video_analyses')
@@ -1539,8 +1499,6 @@ class RecipeRepository {
     return response['id'] as int;
   }
 
-  /// Le créateur choisit de publier sa vidéo sans passer par
-  /// l'analyse IA.
   Future<void> skipVideoAnalysis(int recipeId) async {
     await _supabase.from('recipe_video_analyses').insert({
       'recipe_id': recipeId,
@@ -1548,8 +1506,6 @@ class RecipeRepository {
     });
   }
 
-  /// Récupère la demande d'analyse la plus récente pour une
-  /// recette (ou `null` si aucune n'a été faite).
   Future<Map<String, dynamic>?> getLatestVideoAnalysis(
     int recipeId,
   ) async {
@@ -1566,10 +1522,6 @@ class RecipeRepository {
         : Map<String, dynamic>.from(response);
   }
 
-  /// Marque une demande d'analyse comme appliquée, une fois que le
-  /// créateur a relu/corrigé la suggestion et ajouté lui-même les
-  /// ingrédients/étapes correspondants via [addRecipeIngredient] /
-  /// [addRecipeStep].
   Future<void> markVideoAnalysisApplied(int analysisId) async {
     await _supabase.from('recipe_video_analyses').update({
       'applied': true,
@@ -1581,9 +1533,6 @@ class RecipeRepository {
   // LIKES
   // ============================================================
 
-  /// Bascule le like de l'utilisateur courant sur une recette.
-  /// Retourne `true` si la recette est désormais likée, `false`
-  /// si le like vient d'être retiré.
   Future<bool> toggleLike(int recipeId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1615,7 +1564,6 @@ class RecipeRepository {
     return true;
   }
 
-  /// Nombre total de likes sur une recette.
   Future<int> getLikeCount(int recipeId) async {
     final response = await _supabase
         .from('recipe_likes')
@@ -1625,7 +1573,6 @@ class RecipeRepository {
     return (response as List).length;
   }
 
-  /// Indique si l'utilisateur courant a déjà liké cette recette.
   Future<bool> hasLiked(int recipeId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1643,8 +1590,7 @@ class RecipeRepository {
     return existing != null;
   }
 
-  /// Récupère une recette publiée par son id (utilisé notamment
-  /// pour ouvrir la fiche recette depuis une notification).
+  /// Récupère une recette publiée par son id.
   Future<RecipeModel?> getRecipeById(int id) async {
     final response = await _supabase
         .from('recipes')
@@ -1690,7 +1636,6 @@ class RecipeRepository {
 
     return RecipeModel.fromMap(data);
   }
-
 
   Future<List<RecipeModel>> getMyLikedRecipes() async {
     final user = _supabase.auth.currentUser;
@@ -1740,8 +1685,6 @@ class RecipeRepository {
       final recipeData = row['recipes'];
 
       if (recipeData is! Map<String, dynamic>) continue;
-      // Une recette dépubliée reste "likée" en base mais ne doit
-      // plus apparaître dans les favoris.
       if (recipeData['status'] != 'published') continue;
 
       final data = Map<String, dynamic>.from(recipeData);
@@ -1761,9 +1704,6 @@ class RecipeRepository {
   // NOTATION EN ÉTOILES
   // ============================================================
 
-  /// Attribue (ou met à jour) la note de l'utilisateur courant pour
-  /// une recette, entre 1 et 5. Un seul avis par utilisateur et par
-  /// recette : un nouvel appel remplace le précédent (upsert).
   Future<void> rateRecipe(int recipeId, int rating) async {
     final user = _supabase.auth.currentUser;
 
@@ -1786,8 +1726,6 @@ class RecipeRepository {
     );
   }
 
-  /// Note laissée par l'utilisateur courant sur cette recette
-  /// (`null` s'il n'a pas encore noté).
   Future<int?> getMyRating(int recipeId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1805,7 +1743,6 @@ class RecipeRepository {
     return response?['rating'] as int?;
   }
 
-  /// Moyenne et nombre total d'avis pour une recette.
   Future<({double average, int count})> getRatingSummary(
     int recipeId,
   ) async {
@@ -1831,8 +1768,6 @@ class RecipeRepository {
   // COMMENTAIRES
   // ============================================================
 
-  /// Récupère les commentaires visibles d'une recette, du plus
-  /// ancien au plus récent, avec le nom de leur auteur.
   Future<List<Map<String, dynamic>>> getComments(
     int recipeId,
   ) async {
@@ -1859,8 +1794,6 @@ class RecipeRepository {
         .toList();
   }
 
-  /// Ajoute un commentaire sur une recette publiée. `parentCommentId`
-  /// est facultatif, pour répondre à un commentaire existant.
   Future<void> addComment({
     required int recipeId,
     required String content,
@@ -1884,8 +1817,6 @@ class RecipeRepository {
     });
   }
 
-  /// Modifie le contenu d'un commentaire dont l'utilisateur courant
-  /// est l'auteur.
   Future<void> updateComment({
     required int commentId,
     required String content,
@@ -1913,9 +1844,6 @@ class RecipeRepository {
     }
   }
 
-  /// Supprime un commentaire dont l'utilisateur courant est
-  /// l'auteur. Pour la modération admin (suppression d'un
-  /// commentaire tiers), voir [moderateDeleteComment].
   Future<void> deleteComment(int commentId) async {
     final user = _supabase.auth.currentUser;
 
@@ -1930,8 +1858,6 @@ class RecipeRepository {
         .eq('user_id', user.id);
   }
 
-  /// Supprime n'importe quel commentaire (réservé aux admins,
-  /// appliqué via la policy RLS `get_my_role() = 'admin'`).
   Future<void> moderateDeleteComment(int commentId) async {
     await _supabase
         .from('recipe_comments')
@@ -1939,8 +1865,6 @@ class RecipeRepository {
         .eq('id', commentId);
   }
 
-  /// Masque ou réaffiche un commentaire sans le supprimer
-  /// (modération admin).
   Future<void> moderateHideComment(
     int commentId, {
     required bool hide,
@@ -1950,4 +1874,16 @@ class RecipeRepository {
         .update({'is_hidden': hide})
         .eq('id', commentId);
   }
+}
+
+/// URL signée mise en cache avec son horodatage, pour savoir quand
+/// la considérer comme périmée (voir [RecipeRepository._cacheValidity]).
+class _CachedUrl {
+  final String url;
+  final DateTime cachedAt;
+
+  _CachedUrl(this.url) : cachedAt = DateTime.now();
+
+  bool get isExpired =>
+      DateTime.now().difference(cachedAt) > RecipeRepository._cacheValidity;
 }

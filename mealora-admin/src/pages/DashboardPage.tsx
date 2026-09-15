@@ -257,7 +257,7 @@ export default function DashboardPage() {
           <h1>Bonjour !</h1>
           <p>Voici un aperçu de votre plateforme Mealora</p>
         </div>
-        <div className="dashboard-date">
+        <div className="dashboard-date">0
           <Calendar size={15} />
           {today}
         </div>

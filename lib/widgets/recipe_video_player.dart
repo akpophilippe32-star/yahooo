@@ -16,14 +16,20 @@ import '../repositories/recipe_repository.dart';
 /// - `fullscreenCover: true` : remplit tout l'espace disponible
 ///   (recadré, façon Reels), démarre automatiquement, boucle en
 ///   continu — utilisé par la fiche recette vidéo plein écran.
+///
+/// `muted` : contrôlable depuis l'extérieur (ex. bouton son sur la
+/// vidéo réduite du panneau de commentaires) — change le volume du
+/// lecteur déjà en cours sans jamais le redémarrer.
 class RecipeVideoPlayer extends StatefulWidget {
   final String videoPath;
   final bool fullscreenCover;
+  final bool muted;
 
   const RecipeVideoPlayer({
     super.key,
     required this.videoPath,
     this.fullscreenCover = false,
+    this.muted = false,
   });
 
   @override
@@ -40,6 +46,18 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
   void initState() {
     super.initState();
     _initFuture = _initializePlayer();
+  }
+
+  @override
+  void didUpdateWidget(covariant RecipeVideoPlayer oldWidget) {
+    super.didUpdateWidget(oldWidget);
+
+    // Le volume peut changer (bouton muet) sans que la vidéo n'ait
+    // besoin de redémarrer — on l'applique directement au lecteur
+    // déjà en cours de lecture.
+    if (widget.muted != oldWidget.muted) {
+      _controller?.setVolume(widget.muted ? 0 : 1);
+    }
   }
 
   Future<void> _initializePlayer() async {
@@ -61,6 +79,8 @@ class _RecipeVideoPlayerState extends State<RecipeVideoPlayer> {
       controller.dispose();
       return;
     }
+
+    await controller.setVolume(widget.muted ? 0 : 1);
 
     if (widget.fullscreenCover) {
       await controller.setLooping(true);

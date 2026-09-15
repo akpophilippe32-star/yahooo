@@ -4,6 +4,7 @@ import 'package:device_preview/device_preview.dart';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/gestures.dart';
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_dotenv/flutter_dotenv.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -95,6 +96,37 @@ class _MealoraAppState extends State<MealoraApp> {
     super.dispose();
   }
 
+  /// Recalcule et applique le style de la barre de statut/navigation
+  /// Android à chaque changement de thème : icônes sombres sur fond
+  /// clair, icônes claires sur fond sombre. Sans ça, en thème clair,
+  /// les icônes système (heure, batterie...) restaient blanches —
+  /// donc invisibles sur un fond clair.
+  void _applySystemUiOverlayStyle(BuildContext context) {
+    final mode = ThemeController.instance.mode;
+
+    final isDark = mode == ThemeMode.dark ||
+        (mode == ThemeMode.system &&
+            MediaQuery.platformBrightnessOf(context) == Brightness.dark);
+
+    SystemChrome.setSystemUIOverlayStyle(
+      isDark
+          ? const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.light,
+              statusBarBrightness: Brightness.dark,
+              systemNavigationBarColor: Colors.black,
+              systemNavigationBarIconBrightness: Brightness.light,
+            )
+          : const SystemUiOverlayStyle(
+              statusBarColor: Colors.transparent,
+              statusBarIconBrightness: Brightness.dark,
+              statusBarBrightness: Brightness.light,
+              systemNavigationBarColor: Colors.white,
+              systemNavigationBarIconBrightness: Brightness.dark,
+            ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     // ListenableBuilder reconstruit le MaterialApp dès que le thème
@@ -103,6 +135,10 @@ class _MealoraAppState extends State<MealoraApp> {
     return ListenableBuilder(
       listenable: ThemeController.instance,
       builder: (context, _) {
+        WidgetsBinding.instance.addPostFrameCallback((_) {
+          if (mounted) _applySystemUiOverlayStyle(context);
+        });
+
         return MaterialApp(
           navigatorKey: _navigatorKey,
           debugShowCheckedModeBanner: false,
