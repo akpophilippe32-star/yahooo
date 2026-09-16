@@ -537,21 +537,80 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     return 'Utilisateur';
   }
 
+  /// Chemin de stockage (pas encore une URL) de la photo de profil
+  /// de l'auteur d'un commentaire — à résoudre via
+  /// `_profileRepository.getAvatarUrl(...)` avant affichage.
+  String? _commentAvatarPath(Map<String, dynamic> comment) {
+    final profile = comment['profiles'];
+
+    if (profile is Map<String, dynamic>) {
+      final avatarUrl = profile['avatar_url'] as String?;
+      if (avatarUrl != null && avatarUrl.trim().isNotEmpty) {
+        return avatarUrl;
+      }
+    }
+
+    return null;
+  }
+
+  /// Avatar d'un commentaire : résout et affiche la vraie photo de
+  /// profil de son auteur (mise en cache côté ProfileRepository —
+  /// donc quasi instantané après le tout premier affichage), avec
+  /// une icône générique de repli si l'auteur n'a pas de photo.
+  Widget _buildCommentAvatar(
+    BuildContext context,
+    Map<String, dynamic> comment, {
+    double radius = 16,
+  }) {
+    final avatarPath = _commentAvatarPath(comment);
+
+    if (avatarPath == null) {
+      return CircleAvatar(
+        radius: radius,
+        backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+        child: Icon(Icons.person, size: radius),
+      );
+    }
+
+    return FutureBuilder<String?>(
+      future: _profileRepository.getAvatarUrl(avatarPath),
+      builder: (context, snapshot) {
+        final url = snapshot.data;
+
+        return CircleAvatar(
+          radius: radius,
+          backgroundColor: Theme.of(context).colorScheme.surfaceContainerHighest,
+          backgroundImage: url != null ? NetworkImage(url) : null,
+          child: url == null ? Icon(Icons.person, size: radius) : null,
+        );
+      },
+    );
+  }
+
   /// Ouvre "Voir mon profil" si c'est ta propre recette, sinon le
   /// profil public du créateur — logique partagée entre l'avatar
   /// en bas à gauche et n'importe quel autre point d'entrée vers le
   /// profil sur cet écran.
   void _openAuthorProfile(RecipeModel recipe) {
-    if (recipe.authorId == null) return;
+    _openUserProfile(recipe.authorId);
+  }
+
+  /// Version générale : ouvre le profil de n'importe quel
+  /// utilisateur par son id — un simple utilisateur qui a laissé un
+  /// commentaire, tout autant qu'un créateur. Même logique que
+  /// [_openAuthorProfile] : "Voir mon profil" si c'est toi-même,
+  /// sinon le profil public de la personne concernée.
+  void _openUserProfile(String? userId) {
+    if (userId == null) return;
 
     final currentUserId = Supabase.instance.client.auth.currentUser?.id;
-    final isOwnRecipe = currentUserId == recipe.authorId;
+    final isSelf = currentUserId == userId;
 
     Navigator.of(context).push(
       MaterialPageRoute(
-        builder: (context) => isOwnRecipe
+        builder: (context) => isSelf
             ? const MyProfileViewPage()
-            : CreatorProfilePage(authorId: recipe.authorId!),
+            : CreatorProfilePage(authorId: userId),
       ),
     );
   }
@@ -750,24 +809,35 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
         systemNavigationBarColor: Colors.black,
         systemNavigationBarIconBrightness: Brightness.light,
       ),
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        drawer: const AppDrawer(),
-        // Sans ça, l'ouverture du clavier (champ de commentaire)
-        // réduisait la hauteur disponible, ce qui faisait déborder
-        // la colonne d'icônes (calée depuis le bas) vers le haut —
-        // jusque dans la zone transparente de la barre de statut,
-        // où le cœur "like" se retrouvait mélangé aux icônes
-        // système (batterie, réseau...). La mise en page reste
-        // maintenant fixe ; seul le champ de saisie du panneau de
-        // commentaires gère lui-même sa remontée au-dessus du
-        // clavier (voir _buildCommentsPanel).
-        resizeToAvoidBottomInset: false,
-        body: Column(
-          children: [
-            _showComments
-                ? SizedBox(
-                    height: 220,
+      child: PopScope(
+        // Retour en deux temps : si le panneau de commentaires est
+        // ouvert, le bouton retour le referme d'abord (retour à la
+        // vidéo plein écran) ; ce n'est qu'au deuxième appui, une
+        // fois les commentaires déjà fermés, qu'on quitte vraiment
+        // cet écran.
+        canPop: !_showComments,
+        onPopInvokedWithResult: (didPop, result) {
+          if (didPop) return;
+          setState(() => _showComments = false);
+        },
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          drawer: const AppDrawer(),
+          // Sans ça, l'ouverture du clavier (champ de commentaire)
+          // réduisait la hauteur disponible, ce qui faisait déborder
+          // la colonne d'icônes (calée depuis le bas) vers le haut —
+          // jusque dans la zone transparente de la barre de statut,
+          // où le cœur "like" se retrouvait mélangé aux icônes
+          // système (batterie, réseau...). La mise en page reste
+          // maintenant fixe ; seul le champ de saisie du panneau de
+          // commentaires gère lui-même sa remontée au-dessus du
+          // clavier (voir _buildCommentsPanel).
+          resizeToAvoidBottomInset: false,
+          body: Column(
+            children: [
+              _showComments
+                  ? SizedBox(
+                      height: 300,
                     child: _buildReelVideoStack(context, recipe),
                   )
                 : Expanded(
@@ -776,6 +846,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             if (_showComments) Expanded(child: _buildCommentsPanel(context)),
           ],
         ),
+      ),
       ),
     );
   }
@@ -803,7 +874,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
         color: Colors.black,
         child: Center(
           child: Padding(
-            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 40),
+            padding: const EdgeInsets.symmetric(vertical: 14, horizontal: 44),
             child: GestureDetector(
               onTap: () => setState(() => _showComments = false),
               child: ClipRRect(
@@ -1159,12 +1230,12 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
                       child: Row(
                         crossAxisAlignment: CrossAxisAlignment.start,
                         children: [
-                          CircleAvatar(
-                            radius: 16,
-                            backgroundColor: Theme.of(context)
-                                .colorScheme
-                                .surfaceContainerHighest,
-                            child: const Icon(Icons.person, size: 16),
+                          InkWell(
+                            customBorder: const CircleBorder(),
+                            onTap: () => _openUserProfile(
+                              comment['user_id'] as String?,
+                            ),
+                            child: _buildCommentAvatar(context, comment),
                           ),
                           const SizedBox(width: 10),
                           Expanded(
@@ -1173,11 +1244,16 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
                               children: [
                                 Row(
                                   children: [
-                                    Text(
-                                      _commentAuthorName(comment),
-                                      style: const TextStyle(
-                                        fontWeight: FontWeight.w700,
-                                        fontSize: 13,
+                                    InkWell(
+                                      onTap: () => _openUserProfile(
+                                        comment['user_id'] as String?,
+                                      ),
+                                      child: Text(
+                                        _commentAuthorName(comment),
+                                        style: const TextStyle(
+                                          fontWeight: FontWeight.w700,
+                                          fontSize: 13,
+                                        ),
                                       ),
                                     ),
                                     const SizedBox(width: 6),
@@ -1387,6 +1463,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
           _QuickAction(
             icon: Icons.person_outline,
             label: _authorName ?? 'Profil',
+            avatarUrl: _authorAvatarUrl,
             onTap: () {
               final currentUserId =
                   Supabase.instance.client.auth.currentUser?.id;
@@ -1632,15 +1709,37 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
 
                   return Padding(
                     padding: const EdgeInsets.symmetric(vertical: 8),
-                    child: Column(
+                    child: Row(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(
-                          _commentAuthorName(comment),
-                          style: const TextStyle(fontWeight: FontWeight.bold),
+                        InkWell(
+                          customBorder: const CircleBorder(),
+                          onTap: () => _openUserProfile(
+                            comment['user_id'] as String?,
+                          ),
+                          child: _buildCommentAvatar(context, comment),
                         ),
-                        const SizedBox(height: 2),
-                        Text(comment['content']?.toString() ?? ''),
+                        const SizedBox(width: 10),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              InkWell(
+                                onTap: () => _openUserProfile(
+                                  comment['user_id'] as String?,
+                                ),
+                                child: Text(
+                                  _commentAuthorName(comment),
+                                  style: const TextStyle(
+                                    fontWeight: FontWeight.bold,
+                                  ),
+                                ),
+                              ),
+                              const SizedBox(height: 2),
+                              Text(comment['content']?.toString() ?? ''),
+                            ],
+                          ),
+                        ),
                       ],
                     ),
                   );
@@ -1774,11 +1873,13 @@ class _QuickAction extends StatelessWidget {
   final IconData icon;
   final String label;
   final VoidCallback onTap;
+  final String? avatarUrl;
 
   const _QuickAction({
     required this.icon,
     required this.label,
     required this.onTap,
+    this.avatarUrl,
   });
 
   @override
@@ -1795,11 +1896,15 @@ class _QuickAction extends StatelessWidget {
             CircleAvatar(
               radius: 20,
               backgroundColor: colorScheme.surfaceContainerHighest,
-              child: Icon(
-                icon,
-                size: 18,
-                color: colorScheme.onSurface,
-              ),
+              backgroundImage:
+                  avatarUrl != null ? NetworkImage(avatarUrl!) : null,
+              child: avatarUrl == null
+                  ? Icon(
+                      icon,
+                      size: 18,
+                      color: colorScheme.onSurface,
+                    )
+                  : null,
             ),
             const SizedBox(height: 4),
             SizedBox(

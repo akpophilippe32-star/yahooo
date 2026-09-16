@@ -1783,7 +1783,8 @@ class RecipeRepository {
           user_id,
           profiles (
             username,
-            full_name
+            full_name,
+            avatar_url
           )
         ''')
         .eq('recipe_id', recipeId)
