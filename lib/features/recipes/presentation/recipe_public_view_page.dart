@@ -60,6 +60,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   bool _isVideoMuted = false;
 
   String? _authorName;
+  String? _authorAvatarUrl;
 
   @override
   void initState() {
@@ -91,6 +92,13 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
 
       final username = profile['username']?.toString();
       final fullName = profile['full_name']?.toString();
+      final avatarPath = profile['avatar_url']?.toString();
+
+      final avatarUrl = (avatarPath != null && avatarPath.trim().isNotEmpty)
+          ? await _profileRepository.getAvatarUrl(avatarPath)
+          : null;
+
+      if (!mounted) return;
 
       setState(() {
         _authorName = (fullName != null && fullName.trim().isNotEmpty)
@@ -98,6 +106,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             : (username != null && username.trim().isNotEmpty)
                 ? '@$username'
                 : null;
+        _authorAvatarUrl = avatarUrl;
       });
     } catch (_) {
       // Reste sur le libellé par défaut ("Profil") en cas d'échec.
@@ -528,6 +537,25 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     return 'Utilisateur';
   }
 
+  /// Ouvre "Voir mon profil" si c'est ta propre recette, sinon le
+  /// profil public du créateur — logique partagée entre l'avatar
+  /// en bas à gauche et n'importe quel autre point d'entrée vers le
+  /// profil sur cet écran.
+  void _openAuthorProfile(RecipeModel recipe) {
+    if (recipe.authorId == null) return;
+
+    final currentUserId = Supabase.instance.client.auth.currentUser?.id;
+    final isOwnRecipe = currentUserId == recipe.authorId;
+
+    Navigator.of(context).push(
+      MaterialPageRoute(
+        builder: (context) => isOwnRecipe
+            ? const MyProfileViewPage()
+            : CreatorProfilePage(authorId: recipe.authorId!),
+      ),
+    );
+  }
+
   void _toggleMute() {
     setState(() => _isVideoMuted = !_isVideoMuted);
   }
@@ -725,6 +753,16 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
       child: Scaffold(
         backgroundColor: Colors.black,
         drawer: const AppDrawer(),
+        // Sans ça, l'ouverture du clavier (champ de commentaire)
+        // réduisait la hauteur disponible, ce qui faisait déborder
+        // la colonne d'icônes (calée depuis le bas) vers le haut —
+        // jusque dans la zone transparente de la barre de statut,
+        // où le cœur "like" se retrouvait mélangé aux icônes
+        // système (batterie, réseau...). La mise en page reste
+        // maintenant fixe ; seul le champ de saisie du panneau de
+        // commentaires gère lui-même sa remontée au-dessus du
+        // clavier (voir _buildCommentsPanel).
+        resizeToAvoidBottomInset: false,
         body: Column(
           children: [
             _showComments
@@ -735,10 +773,7 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
                 : Expanded(
                     child: _buildReelVideoStack(context, recipe),
                   ),
-            if (_showComments)
-              Expanded(child: _buildCommentsPanel(context))
-            else
-              _buildReelCommentBar(),
+            if (_showComments) Expanded(child: _buildCommentsPanel(context)),
           ],
         ),
       ),
@@ -800,107 +835,70 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
     }
 
     // ==========================================================
-    // VIDÉO PLEIN ÉCRAN (comportement normal, inchangé)
+    // VIDÉO PLEIN ÉCRAN : un vrai en-tête (fond uni, pas de vidéo
+    // derrière) au-dessus, la vidéo occupe le reste — comme la
+    // référence, où le lecteur s'arrête avant le haut de l'écran
+    // au lieu de remonter jusqu'à la barre de statut.
     // ==========================================================
-    return Stack(
-      fit: StackFit.expand,
+    return Column(
       children: [
-        videoPlayer,
-
-        Positioned(
-          top: 0,
-          left: 0,
-          right: 0,
-          height: 120,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.black.withValues(alpha: 0.55),
-                    Colors.transparent,
-                  ],
+        Container(
+          color: Colors.black,
+          padding: EdgeInsets.only(
+            top: MediaQuery.of(context).padding.top + 8,
+            left: 8,
+            right: 8,
+            bottom: 8,
+          ),
+          child: Row(
+            children: [
+              _CircleIconButton(
+                icon: Icons.arrow_back,
+                onTap: () => Navigator.of(context).pop(),
+              ),
+              const SizedBox(width: 8),
+              Builder(
+                builder: (context) => _CircleIconButton(
+                  icon: Icons.menu,
+                  onTap: () => Scaffold.of(context).openDrawer(),
                 ),
               ),
-            ),
+            ],
           ),
         ),
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          height: 260,
-          child: IgnorePointer(
-            child: DecoratedBox(
-              decoration: BoxDecoration(
-                gradient: LinearGradient(
-                  begin: Alignment.topCenter,
-                  end: Alignment.bottomCenter,
-                  colors: [
-                    Colors.transparent,
-                    Colors.black.withValues(alpha: 0.75),
-                  ],
+        Expanded(
+          child: Stack(
+            fit: StackFit.expand,
+            children: [
+              videoPlayer,
+
+              Positioned(
+                bottom: 0,
+                left: 0,
+                right: 0,
+                height: 260,
+                child: IgnorePointer(
+                  child: DecoratedBox(
+                    decoration: BoxDecoration(
+                      gradient: LinearGradient(
+                        begin: Alignment.topCenter,
+                        end: Alignment.bottomCenter,
+                        colors: [
+                          Colors.transparent,
+                          Colors.black.withValues(alpha: 0.75),
+                        ],
+                      ),
+                    ),
+                  ),
                 ),
               ),
-            ),
-          ),
-        ),
 
-        // Retour + menu (en haut à gauche).
-        Positioned(
-          top: 8,
-          left: 8,
-          child: _CircleIconButton(
-            icon: Icons.arrow_back,
-            onTap: () => Navigator.of(context).pop(),
-          ),
-        ),
-        Positioned(
-          top: 8,
-          left: 52,
-          child: Builder(
-            builder: (context) => _CircleIconButton(
-              icon: Icons.menu,
-              onTap: () => Scaffold.of(context).openDrawer(),
-            ),
-          ),
-        ),
-
-        // Colonne d'actions à droite (façon Reels).
-        Positioned(
+              // Colonne d'actions à droite (façon Reels).
+              Positioned(
           right: 10,
           bottom: 110,
           child: Column(
             children: [
-              if (recipe.authorId != null)
-                _ReelAction(
-                  child: CircleAvatar(
-                    radius: 22,
-                    backgroundColor: Colors.white,
-                    child: Icon(
-                      Icons.person,
-                      color: Colors.black.withValues(alpha: 0.6),
-                    ),
-                  ),
-                  onTap: () {
-                    final currentUserId =
-                        Supabase.instance.client.auth.currentUser?.id;
-                    final isOwnRecipe = currentUserId == recipe.authorId;
-
-                    Navigator.of(context).push(
-                      MaterialPageRoute(
-                        builder: (context) => isOwnRecipe
-                            ? const MyProfileViewPage()
-                            : CreatorProfilePage(
-                                authorId: recipe.authorId!,
-                              ),
-                      ),
-                    );
-                  },
-                ),
-              const SizedBox(height: 22),
               _ReelAction(
                 icon: _isLiked ? Icons.favorite : Icons.favorite_border,
                 iconColor: _isLiked ? Colors.red : Colors.white,
@@ -958,12 +956,35 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             mainAxisSize: MainAxisSize.min,
             children: [
               if (_authorName != null)
-                Text(
-                  _authorName!,
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                    fontSize: 13,
+                InkWell(
+                  onTap: () => _openAuthorProfile(recipe),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      CircleAvatar(
+                        radius: 13,
+                        backgroundColor: Colors.white,
+                        backgroundImage: _authorAvatarUrl != null
+                            ? NetworkImage(_authorAvatarUrl!)
+                            : null,
+                        child: _authorAvatarUrl == null
+                            ? Icon(
+                                Icons.person,
+                                size: 15,
+                                color: Colors.black.withValues(alpha: 0.6),
+                              )
+                            : null,
+                      ),
+                      const SizedBox(width: 8),
+                      Text(
+                        _authorName!,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontWeight: FontWeight.w700,
+                          fontSize: 13,
+                        ),
+                      ),
+                    ],
                   ),
                 ),
               if (!_isRatingLoading) ...[
@@ -1016,10 +1037,13 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
                   ),
                 ),
               ],
-            ],
+              ],
+            ),
           ),
-        ),
-      ],
+        ],
+      ),
+    ),
+  ],
     );
   }
 
@@ -1071,6 +1095,11 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
   Widget _buildCommentsPanel(BuildContext context) {
     return Container(
       color: Theme.of(context).scaffoldBackgroundColor,
+      // Comme le Scaffold ne redimensionne plus la page pour le
+      // clavier (voir resizeToAvoidBottomInset ci-dessus), c'est ce
+      // panneau lui-même qui remonte au-dessus du clavier quand il
+      // apparaît — la vidéo réduite au-dessus, elle, ne bouge pas.
+      padding: EdgeInsets.only(bottom: MediaQuery.of(context).viewInsets.bottom),
       child: Column(
         children: [
           const SizedBox(height: 8),
@@ -1222,58 +1251,6 @@ class _RecipePublicViewPageState extends State<RecipePublicViewPage> {
             ),
           ),
         ],
-      ),
-    );
-  }
-
-  /// Barre de commentaire fixée en bas, façon X : un champ texte
-  /// ("Ajoutez un commentaire...") + bouton d'envoi, toujours
-  /// visible sous la vidéo — sans passer par une feuille séparée.
-  Widget _buildReelCommentBar() {
-    return SafeArea(
-      top: false,
-      child: Container(
-        color: Colors.black,
-        padding: const EdgeInsets.fromLTRB(12, 8, 8, 8),
-        child: Row(
-          children: [
-            Expanded(
-              child: Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.12),
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TextField(
-                  controller: _commentController,
-                  style: const TextStyle(color: Colors.white, fontSize: 13),
-                  decoration: const InputDecoration(
-                    hintText: 'Ajoutez un commentaire...',
-                    hintStyle: TextStyle(color: Colors.white54),
-                    border: InputBorder.none,
-                    isDense: true,
-                    contentPadding: EdgeInsets.symmetric(vertical: 12),
-                  ),
-                  minLines: 1,
-                  maxLines: 3,
-                ),
-              ),
-            ),
-            IconButton(
-              onPressed: _isSubmittingComment ? null : _submitComment,
-              icon: _isSubmittingComment
-                  ? const SizedBox(
-                      width: 18,
-                      height: 18,
-                      child: CircularProgressIndicator(
-                        strokeWidth: 2,
-                        color: Colors.white,
-                      ),
-                    )
-                  : const Icon(Icons.send, color: Colors.white),
-            ),
-          ],
-        ),
       ),
     );
   }
