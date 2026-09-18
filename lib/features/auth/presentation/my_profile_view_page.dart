@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -60,7 +63,9 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
     _load();
   }
 
-  bool get _isCreator => _role == 'creator' || _role == 'admin';
+  // Un admin administre, il ne crée pas de recettes — seul un
+  // compte "creator" a droit à la grille/au bouton de création.
+  bool get _isCreator => _role == 'creator';
 
   void _load() {
     _profileFuture = _profileRepository.getMyProfile();
@@ -159,6 +164,7 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
 
   Future<void> _showBecomeCreatorSheet() async {
     String specialty = 'cuisine';
+    PlatformFile? selectedDocument;
     final noteController = TextEditingController();
 
     await showModalBottomSheet<void>(
@@ -170,7 +176,31 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
       builder: (sheetContext) {
         return StatefulBuilder(
           builder: (sheetContext, setSheetState) {
+            final sheetColorScheme = Theme.of(sheetContext).colorScheme;
             final isNutrition = specialty == 'nutrition';
+
+            Future<void> pickDocument() async {
+              try {
+                final result = await FilePicker.platform.pickFiles(
+                  type: FileType.custom,
+                  allowedExtensions: ['pdf'],
+                );
+
+                if (result != null && result.files.isNotEmpty) {
+                  setSheetState(() => selectedDocument = result.files.single);
+                }
+              } catch (error) {
+                if (!sheetContext.mounted) return;
+
+                ScaffoldMessenger.of(sheetContext).showSnackBar(
+                  SnackBar(
+                    content: Text(
+                      'Impossible de sélectionner le fichier : $error',
+                    ),
+                  ),
+                );
+              }
+            }
 
             return Padding(
               padding: EdgeInsets.only(
@@ -189,11 +219,17 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                   ),
                   const SizedBox(height: 6),
                   Text(
-                    'Un administrateur examine chaque demande avant '
-                    'de l’activer.',
+                    isNutrition
+                        ? 'Un administrateur examine chaque demande. Le '
+                            'document justificatif est obligatoire pour '
+                            'une candidature nutrition.'
+                        : 'Un administrateur examine chaque demande avant '
+                            'de l’activer. Tout est facultatif, mais un '
+                            'document justificatif affichera un badge '
+                            '"Vérifié" sur ton profil.',
                     style: TextStyle(
                       fontSize: 12,
-                      color: Theme.of(sheetContext).colorScheme.onSurfaceVariant,
+                      color: sheetColorScheme.onSurfaceVariant,
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -220,14 +256,80 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                   TextField(
                     controller: noteController,
                     maxLines: 4,
-                    decoration: InputDecoration(
-                      labelText: isNutrition
-                          ? 'Expérience / qualifications'
-                          : 'Expérience (facultatif)',
-                      hintText: isNutrition
-                          ? 'Ex. diététicien diplômé, 5 ans d’expérience...'
-                          : null,
+                    decoration: const InputDecoration(
+                      labelText: 'Expérience / qualifications (facultatif)',
+                      hintText: 'Ex. diététicien diplômé, 5 ans d’expérience...',
                       alignLabelWithHint: true,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  Text(
+                    isNutrition
+                        ? 'DOCUMENT JUSTIFICATIF (PDF, OBLIGATOIRE)'
+                        : 'DOCUMENT JUSTIFICATIF (PDF, FACULTATIF)',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w600,
+                      letterSpacing: 0.4,
+                      color: sheetColorScheme.onSurfaceVariant,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  InkWell(
+                    onTap: pickDocument,
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 14,
+                        vertical: 14,
+                      ),
+                      decoration: BoxDecoration(
+                        border: Border.all(
+                          color: isNutrition && selectedDocument == null
+                              ? sheetColorScheme.error
+                              : sheetColorScheme.outline,
+                        ),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(
+                            Icons.picture_as_pdf_outlined,
+                            color: sheetColorScheme.primary,
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              selectedDocument?.name ??
+                                  'Importer un diplôme, certificat...',
+                              maxLines: 1,
+                              overflow: TextOverflow.ellipsis,
+                              style: TextStyle(
+                                fontSize: 13,
+                                color: selectedDocument == null
+                                    ? sheetColorScheme.onSurfaceVariant
+                                    : sheetColorScheme.onSurface,
+                                fontWeight: selectedDocument == null
+                                    ? FontWeight.w400
+                                    : FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (selectedDocument != null)
+                            IconButton(
+                              onPressed: () =>
+                                  setSheetState(() => selectedDocument = null),
+                              icon: const Icon(Icons.close, size: 18),
+                              splashRadius: 18,
+                            )
+                          else
+                            Icon(
+                              Icons.upload_file,
+                              size: 18,
+                              color: sheetColorScheme.onSurfaceVariant,
+                            ),
+                        ],
+                      ),
                     ),
                   ),
                   const SizedBox(height: 20),
@@ -235,13 +337,13 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                     onPressed: _isSubmittingApplication
                         ? null
                         : () async {
-                            if (isNutrition &&
-                                noteController.text.trim().isEmpty) {
+                            if (isNutrition && selectedDocument == null) {
                               ScaffoldMessenger.of(sheetContext).showSnackBar(
                                 const SnackBar(
                                   content: Text(
-                                    'Ce champ aide l’admin à valider ta '
-                                    'demande.',
+                                    'Un document justificatif (PDF) est '
+                                    'obligatoire pour une candidature '
+                                    'nutrition.',
                                   ),
                                 ),
                               );
@@ -251,12 +353,30 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                             setState(() => _isSubmittingApplication = true);
 
                             try {
+                              String? documentPath;
+
+                              if (selectedDocument != null &&
+                                  selectedDocument!.path != null) {
+                                try {
+                                  documentPath = await _authRepository
+                                      .uploadCreatorDocument(
+                                    File(selectedDocument!.path!),
+                                  );
+                                } catch (error) {
+                                  debugPrint(
+                                    'Impossible d’envoyer le document : '
+                                    '$error',
+                                  );
+                                }
+                              }
+
                               await _authRepository.submitCreatorApplication(
                                 specialty: specialty,
                                 applicationNote:
                                     noteController.text.trim().isEmpty
                                         ? null
                                         : noteController.text.trim(),
+                                documentPath: documentPath,
                               );
 
                               if (!mounted) return;
@@ -563,6 +683,11 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                       final specialty = profile['specialty'] as String?;
                       final creatorStatus =
                           profile['creator_status'] as String?;
+                      final documentPath =
+                          profile['creator_document_path'] as String?;
+                      final isVerified = role == 'creator' &&
+                          documentPath != null &&
+                          documentPath.isNotEmpty;
                       final birthLabel = _formatBirthDate(profile);
                       final joinedLabel = _formatJoinedDate();
 
@@ -646,6 +771,18 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                                 Chip(
                                   label: Text(_specialtyLabel(specialty)),
                                   visualDensity: VisualDensity.compact,
+                                ),
+                              if (isVerified)
+                                Chip(
+                                  avatar: Icon(
+                                    Icons.verified,
+                                    size: 16,
+                                    color: colorScheme.primary,
+                                  ),
+                                  label: const Text('Vérifié'),
+                                  visualDensity: VisualDensity.compact,
+                                  backgroundColor: colorScheme.primary
+                                      .withValues(alpha: 0.12),
                                 ),
                               if (creatorStatus == 'pending')
                                 Chip(
@@ -816,13 +953,15 @@ class _MyProfileViewPageState extends State<MyProfileViewPage> {
                     },
                   ),
                 ),
-              ] else
+              ] else if (_role != 'admin')
                 SliverPadding(
                   padding: const EdgeInsets.fromLTRB(20, 16, 20, 0),
                   sliver: SliverToBoxAdapter(
                     child: _buildBecomeCreatorPrompt(colorScheme),
                   ),
                 ),
+              // Un admin ne voit ni grille de recettes, ni invitation
+              // à devenir créateur : ça n'a pas de sens pour ce rôle.
 
               const SliverPadding(padding: EdgeInsets.only(bottom: 90)),
             ],

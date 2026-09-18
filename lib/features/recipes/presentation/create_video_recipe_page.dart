@@ -1,7 +1,9 @@
 import 'dart:typed_data';
 
+import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:image_picker/image_picker.dart';
+import 'package:video_thumbnail/video_thumbnail.dart' as vt;
 
 import '../../../core/app_bar_leading.dart';
 import '../../../core/app_drawer.dart';
@@ -73,6 +75,47 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
   }
 
   // ============================================================
+  // MINIATURE LÉGÈRE (générée une seule fois, à l'import)
+  // ============================================================
+
+  /// Extrait une vraie image JPEG (quelques Ko) de la première
+  /// seconde de la vidéo choisie, pour ne plus jamais avoir besoin
+  /// de retélécharger un bout de la vidéo entière juste pour
+  /// afficher une miniature (accueil, grilles, carrousel...) — ça
+  /// représentait l'essentiel du trafic Supabase inutile jusqu'ici.
+  ///
+  /// Ne fonctionne que sur mobile (Android/iOS) : le paquet utilisé
+  /// n'a pas d'équivalent web. Sur le web, on continue sans
+  /// miniature pré-générée (repli sur l'ancien comportement) —
+  /// sans impact, puisque c'est l'usage mobile qui génère l'essentiel
+  /// du trafic réel.
+  Future<String?> _generateAndUploadThumbnail(String videoLocalPath) async {
+    if (kIsWeb) return null;
+
+    try {
+      final Uint8List? thumbnailBytes = await vt.VideoThumbnail.thumbnailData(
+        video: videoLocalPath,
+        imageFormat: vt.ImageFormat.JPEG,
+        maxWidth: 480,
+        quality: 70,
+      );
+
+      if (thumbnailBytes == null) return null;
+
+      return await _recipeRepository.uploadRecipeImage(
+        bytes: thumbnailBytes,
+        fileExtension: 'jpg',
+      );
+    } catch (error) {
+      debugPrint('Impossible de générer la miniature vidéo : $error');
+      // Pas bloquant : la recette se crée quand même, juste sans
+      // miniature pré-générée pour cette fois (repli sur l'ancien
+      // comportement pour cette recette précise).
+      return null;
+    }
+  }
+
+  // ============================================================
   // CRÉER LE BROUILLON VIDÉO (avec ou sans demande d'analyse IA)
   // ============================================================
 
@@ -100,6 +143,13 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
 
       final extension =
           _selectedVideo!.name.split('.').last.toLowerCase();
+
+      // La miniature est générée AVANT l'envoi de la vidéo (les
+      // deux sont indépendants, mais autant montrer une progression
+      // logique côté utilisateur si un indicateur détaillé est
+      // ajouté plus tard).
+      final thumbnailPath =
+          await _generateAndUploadThumbnail(_selectedVideo!.path);
 
       // ============================================================
       // ENVOI DE LA VIDÉO
@@ -138,6 +188,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
                 ? null
                 : _descriptionController.text.trim(),
             categoryId: _selectedCategoryId,
+            thumbnailPath: thumbnailPath,
           )
           .timeout(
             const Duration(seconds: 60),
@@ -505,6 +556,9 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
       final extension =
           _selectedVideo!.name.split('.').last.toLowerCase();
 
+      final thumbnailPath =
+          await _generateAndUploadThumbnail(_selectedVideo!.path);
+
       final videoPath = await _recipeRepository
           .uploadRecipeVideo(
             bytes: bytes,
@@ -520,6 +574,7 @@ class _CreateVideoRecipePageState extends State<CreateVideoRecipePage> {
                 ? null
                 : _descriptionController.text.trim(),
             categoryId: _selectedCategoryId,
+            thumbnailPath: thumbnailPath,
           )
           .timeout(const Duration(seconds: 60));
 

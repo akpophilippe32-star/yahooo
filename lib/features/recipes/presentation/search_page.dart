@@ -481,6 +481,7 @@ class _RecipeListTile extends StatelessWidget {
                   ? RecipeVideoThumbnail(
                       videoPath: recipe.videoUrl!,
                       recipeRepository: recipeRepository,
+                      imageUrl: recipe.imageUrl,
                     )
                   : FutureBuilder<String?>(
                       future:
@@ -595,6 +596,7 @@ class _RecipeCompactTile extends StatelessWidget {
               ? RecipeVideoThumbnail(
                   videoPath: recipe.videoUrl!,
                   recipeRepository: recipeRepository,
+                  imageUrl: recipe.imageUrl,
                 )
               : FutureBuilder<String?>(
                   future: recipeRepository.getRecipeImageUrl(recipe.imageUrl),

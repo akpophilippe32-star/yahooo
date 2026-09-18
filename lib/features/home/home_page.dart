@@ -54,15 +54,32 @@ class HomeTabViewState extends State<HomeTabView> {
     _recipesFuture = _recipeRepository.getPublishedRecipes();
 
     // Défilement automatique du carrousel façon Play Store.
+    //
+    // Ce minuteur tourne en fait en PERMANENCE, même quand on n'est
+    // plus sur l'onglet Accueil : la coquille de l'app garde tous
+    // les onglets "en vie" en arrière-plan (IndexedStack) pour ne
+    // pas perdre leur état, donc ce widget n'est jamais réellement
+    // détruit tant que l'app tourne. Deux garde-fous nécessaires :
+    // - l'index de page ne doit jamais grossir indéfiniment (après
+    //   des heures d'utilisation, un très grand nombre peut faire
+    //   planter les calculs internes de défilement de Flutter) ;
+    // - toute erreur ici doit être absorbée, jamais remonter et
+    //   faire planter toute l'application.
     _carouselTimer = Timer.periodic(const Duration(seconds: 4), (_) {
+      if (!mounted) return;
       if (!_carouselController.hasClients) return;
 
-      final nextPage = _carouselPage + 1;
-      _carouselController.animateToPage(
-        nextPage,
-        duration: const Duration(milliseconds: 500),
-        curve: Curves.easeInOut,
-      );
+      try {
+        final nextPage = (_carouselPage + 1) % 10000;
+        _carouselController.animateToPage(
+          nextPage,
+          duration: const Duration(milliseconds: 500),
+          curve: Curves.easeInOut,
+        );
+      } catch (_) {
+        // Absorbée volontairement — un souci d'animation du
+        // carrousel ne doit jamais faire tomber toute l'app.
+      }
     });
   }
 
@@ -710,6 +727,7 @@ class _PromoRecipeCardState extends State<_PromoRecipeCard> {
                       ? RecipeVideoThumbnail(
                           videoPath: recipe.videoUrl!,
                           recipeRepository: widget.recipeRepository,
+                          imageUrl: recipe.imageUrl,
                         )
                       : Container(
                           color: colorScheme.surfaceContainerHighest,

@@ -45,8 +45,9 @@ class _AppShellPageState extends State<AppShellPage> {
       NotificationRepository();
   int _unreadNotificationCount = 0;
 
-  bool get _isCreator =>
-      !_isLoadingRole && (_userRole == 'creator' || _userRole == 'admin');
+  // Un admin ne crée pas de recettes — il administre, c'est tout.
+  // Seul un compte "creator" a droit au "+".
+  bool get _isCreator => !_isLoadingRole && _userRole == 'creator';
 
   @override
   void initState() {
@@ -193,8 +194,12 @@ class _AppShellPageState extends State<AppShellPage> {
   }
 
   // ============================================================
-  // MENU DE CRÉATION (bouton "+" central)
+  // BOUTON CENTRAL : MENU DE CRÉATION (créateurs) OU FAVORIS (users)
   // ============================================================
+  //
+  // Un compte "user" simple ne peut pas publier de recettes : lui
+  // proposer le "+" n'a pas de sens. Le bouton central devient donc
+  // un raccourci vers ses Favoris à la place.
 
   Future<void> _openCreateMenu() async {
     if (!_isCreator) {
@@ -266,6 +271,10 @@ class _AppShellPageState extends State<AppShellPage> {
         );
       },
     );
+  }
+
+  Future<void> _openFavorites() async {
+    await Navigator.of(context).pushNamed('/favorites');
   }
 
   // ============================================================
@@ -357,8 +366,12 @@ class _AppShellPageState extends State<AppShellPage> {
             shape: const CircleBorder(),
             child: InkWell(
               customBorder: const CircleBorder(),
-              onTap: _openCreateMenu,
-              child: const Icon(Icons.add, color: Colors.white, size: 26),
+              onTap: _isCreator ? _openCreateMenu : _openFavorites,
+              child: Icon(
+                _isCreator ? Icons.add : Icons.favorite_border,
+                color: Colors.white,
+                size: 26,
+              ),
             ),
           ),
         ),

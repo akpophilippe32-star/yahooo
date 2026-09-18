@@ -271,6 +271,7 @@ class _MyRecipesPageState extends State<MyRecipesPage> {
                         ? RecipeVideoThumbnail(
                             videoPath: recipe.videoUrl!,
                             recipeRepository: _recipeRepository,
+                            imageUrl: recipe.imageUrl,
                           )
                         : FutureBuilder<String?>(
                             future: _recipeRepository

@@ -226,6 +226,61 @@ class ProfileRepository {
       return true;
     }
   }
+
+  // ============================================================
+  // NOTATION DU PROFIL CRÉATEUR
+  // ============================================================
+  // Réservée aux créateurs ayant complété leur candidature avec un
+  // document justificatif (creator_document_path non nul) — voir
+  // rate_creator() côté base de données, qui applique cette règle
+  // même si le client est contourné.
+
+  /// Note (ou met à jour sa note pour) un créateur, de 1 à 5.
+  /// Lève une exception si le créateur n'a pas encore de document
+  /// justificatif, ou si on essaie de se noter soi-même.
+  Future<void> rateCreator({
+    required String creatorId,
+    required int rating,
+  }) async {
+    await _supabase.rpc(
+      'rate_creator',
+      params: {
+        'p_creator_id': creatorId,
+        'p_rating': rating,
+      },
+    );
+  }
+
+  /// Moyenne + nombre d'avis pour un créateur donné.
+  Future<({double average, int count})> getCreatorRatingSummary(
+    String creatorId,
+  ) async {
+    final response = await _supabase
+        .rpc(
+          'get_creator_rating_summary',
+          params: {'p_creator_id': creatorId},
+        )
+        .single();
+
+    final row = Map<String, dynamic>.from(response as Map);
+
+    return (
+      average: (row['average'] as num?)?.toDouble() ?? 0.0,
+      count: (row['rating_count'] as num?)?.toInt() ?? 0,
+    );
+  }
+
+  /// La note déjà donnée par l'utilisateur connecté à ce créateur,
+  /// ou null s'il ne l'a pas encore noté.
+  Future<int?> getMyRatingForCreator(String creatorId) async {
+    final response = await _supabase.rpc(
+      'get_my_rating_for_creator',
+      params: {'p_creator_id': creatorId},
+    );
+
+    if (response == null) return null;
+    return (response as num).toInt();
+  }
 }
 
 /// URL signée mise en cache avec son horodatage (voir

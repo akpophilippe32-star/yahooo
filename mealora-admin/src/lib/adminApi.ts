@@ -37,6 +37,32 @@ export async function getAvatarUrl(
   return data.signedUrl;
 }
 
+const creatorDocumentUrlCache = new Map<string, string>();
+
+/**
+ * URL signée vers le document justificatif (PDF) d'une candidature
+ * créateur, stocké dans le bucket privé `creator-documents`. Seul un
+ * admin peut lire ce bucket (policy RLS côté base) — voir la
+ * migration mealora_migration_creator_document.sql.
+ */
+export async function getCreatorDocumentUrl(
+  path: string | null | undefined,
+): Promise<string | null> {
+  if (!path) return null;
+
+  const cached = creatorDocumentUrlCache.get(path);
+  if (cached) return cached;
+
+  const { data, error } = await supabase.storage
+    .from('creator-documents')
+    .createSignedUrl(path, 60 * 60);
+
+  if (error || !data) return null;
+
+  creatorDocumentUrlCache.set(path, data.signedUrl);
+  return data.signedUrl;
+}
+
 const recipeImageUrlCache = new Map<string, string>();
 
 export async function getRecipeImageUrl(
@@ -412,6 +438,7 @@ export interface CreatorApplication {
   avatar_url: string | null;
   specialty: string | null;
   application_note: string | null;
+  creator_document_path: string | null;
   created_at: string;
 }
 
@@ -421,7 +448,7 @@ export async function getPendingCreatorApplications(): Promise<
   const { data, error } = await supabase
     .from('profiles')
     .select(
-      'id, full_name, username, avatar_url, specialty, application_note, created_at',
+      'id, full_name, username, avatar_url, specialty, application_note, creator_document_path, created_at',
     )
     .eq('creator_status', 'pending')
     .order('created_at', { ascending: true });

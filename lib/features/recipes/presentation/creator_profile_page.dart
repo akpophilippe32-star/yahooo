@@ -32,6 +32,19 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
   bool _isFollowLoading = true;
   bool _isTogglingFollow = false;
 
+  // ============================================================
+  // NOTATION DU PROFIL CRÉATEUR
+  // ============================================================
+  // N'est activée que si le créateur a complété sa candidature avec
+  // un document justificatif (creator_document_path non nul) — voir
+  // rate_creator() côté base de données, qui applique la même règle.
+  bool _canBeRated = false;
+  bool _isRatingLoading = false;
+  bool _isSubmittingRating = false;
+  double _ratingAverage = 0;
+  int _ratingCount = 0;
+  int? _myRating;
+
   @override
   void initState() {
     super.initState();
@@ -39,6 +52,21 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
     _recipesFuture =
         _recipeRepository.getPublishedRecipesByAuthor(widget.authorId);
     _loadFollowState();
+
+    _profileFuture.then((profile) {
+      if (!mounted) return;
+
+      final role = profile['role'] as String? ?? 'user';
+      final documentPath = profile['creator_document_path'] as String?;
+      final canBeRated =
+          role == 'creator' && documentPath != null && documentPath.isNotEmpty;
+
+      setState(() => _canBeRated = canBeRated);
+
+      if (canBeRated) {
+        _loadRatingState();
+      }
+    });
   }
 
   Future<void> _loadFollowState() async {
@@ -58,6 +86,65 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
     } catch (_) {
       if (!mounted) return;
       setState(() => _isFollowLoading = false);
+    }
+  }
+
+  Future<void> _loadRatingState() async {
+    setState(() => _isRatingLoading = true);
+
+    try {
+      final summary =
+          await _profileRepository.getCreatorRatingSummary(widget.authorId);
+      final myRating =
+          await _profileRepository.getMyRatingForCreator(widget.authorId);
+
+      if (!mounted) return;
+
+      setState(() {
+        _ratingAverage = summary.average;
+        _ratingCount = summary.count;
+        _myRating = myRating;
+        _isRatingLoading = false;
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _isRatingLoading = false);
+    }
+  }
+
+  Future<void> _submitRating(int rating) async {
+    if (_isSubmittingRating) return;
+
+    final previousRating = _myRating;
+
+    setState(() {
+      _isSubmittingRating = true;
+      _myRating = rating;
+    });
+
+    try {
+      await _profileRepository.rateCreator(
+        creatorId: widget.authorId,
+        rating: rating,
+      );
+
+      await _loadRatingState();
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Merci pour ta note !')),
+      );
+    } catch (error) {
+      if (!mounted) return;
+
+      setState(() => _myRating = previousRating);
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Impossible d’enregistrer la note : $error')),
+      );
+    } finally {
+      if (mounted) setState(() => _isSubmittingRating = false);
     }
   }
 
@@ -132,6 +219,103 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
     }
 
     return const Color(0xFFE8703C);
+  }
+
+  // ============================================================
+  // ÉTOILES (affichage moyenne + saisie de la note)
+  // ============================================================
+
+  Widget _buildStaticStars(double average, ColorScheme colorScheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final threshold = index + 1;
+        final IconData icon;
+
+        if (average >= threshold) {
+          icon = Icons.star;
+        } else if (average >= threshold - 0.5) {
+          icon = Icons.star_half;
+        } else {
+          icon = Icons.star_border;
+        }
+
+        return Icon(icon, size: 16, color: colorScheme.primary);
+      }),
+    );
+  }
+
+  Widget _buildInteractiveStars(ColorScheme colorScheme) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: List.generate(5, (index) {
+        final starValue = index + 1;
+        final isFilled = _myRating != null && starValue <= _myRating!;
+
+        return IconButton(
+          onPressed:
+              _isSubmittingRating ? null : () => _submitRating(starValue),
+          icon: Icon(
+            isFilled ? Icons.star : Icons.star_border,
+            color: colorScheme.primary,
+          ),
+          splashRadius: 18,
+          padding: EdgeInsets.zero,
+          constraints: const BoxConstraints(),
+        );
+      }),
+    );
+  }
+
+  Widget _buildRatingSection(ColorScheme colorScheme) {
+    final isSelf =
+        widget.authorId == Supabase.instance.client.auth.currentUser?.id;
+
+    return Container(
+      padding: const EdgeInsets.all(16),
+      decoration: BoxDecoration(
+        color: colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(14),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            children: [
+              _buildStaticStars(_ratingAverage, colorScheme),
+              const SizedBox(width: 8),
+              Text(
+                _isRatingLoading
+                    ? 'Chargement...'
+                    : _ratingCount == 0
+                        ? 'Pas encore d’avis'
+                        : '${_ratingAverage.toStringAsFixed(1)} '
+                            '($_ratingCount avis)',
+                style: TextStyle(
+                  fontSize: 12,
+                  fontWeight: FontWeight.w600,
+                  color: colorScheme.onSurfaceVariant,
+                ),
+              ),
+            ],
+          ),
+          if (!isSelf) ...[
+            const SizedBox(height: 10),
+            Text(
+              'TA NOTE',
+              style: TextStyle(
+                fontSize: 11,
+                fontWeight: FontWeight.w600,
+                letterSpacing: 0.4,
+                color: colorScheme.onSurfaceVariant,
+              ),
+            ),
+            const SizedBox(height: 2),
+            _buildInteractiveStars(colorScheme),
+          ],
+        ],
+      ),
+    );
   }
 
   @override
@@ -242,6 +426,11 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
                     final role = profile['role'] as String? ?? 'user';
                     final specialty = profile['specialty'] as String?;
                     final bio = profile['bio']?.toString();
+                    final documentPath =
+                        profile['creator_document_path'] as String?;
+                    final isVerified = role == 'creator' &&
+                        documentPath != null &&
+                        documentPath.isNotEmpty;
 
                     return Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
@@ -274,6 +463,18 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
                               Chip(
                                 label: Text(_specialtyLabel(specialty)),
                                 visualDensity: VisualDensity.compact,
+                              ),
+                            if (isVerified)
+                              Chip(
+                                avatar: Icon(
+                                  Icons.verified,
+                                  size: 16,
+                                  color: colorScheme.primary,
+                                ),
+                                label: const Text('Vérifié'),
+                                visualDensity: VisualDensity.compact,
+                                backgroundColor: colorScheme.primary
+                                    .withValues(alpha: 0.12),
                               ),
                           ],
                         ),
@@ -338,6 +539,10 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
                                     label: const Text('Suivre'),
                                   ),
                           ),
+                        if (_canBeRated) ...[
+                          const SizedBox(height: 14),
+                          _buildRatingSection(colorScheme),
+                        ],
                       ],
                     );
                   },

@@ -108,6 +108,7 @@ class _RecipeGridCardState extends State<RecipeGridCard> {
                       ? RecipeVideoThumbnail(
                           videoPath: recipe.videoUrl!,
                           recipeRepository: widget.recipeRepository,
+                          imageUrl: recipe.imageUrl,
                         )
                       : FutureBuilder<String?>(
                           future: widget.recipeRepository

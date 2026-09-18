@@ -1,6 +1,7 @@
 import { useEffect, useState } from 'react';
-import { RefreshCw, UserPlus } from 'lucide-react';
+import { FileText, RefreshCw, UserPlus } from 'lucide-react';
 import {
+  getCreatorDocumentUrl,
   getPendingCreatorApplications,
   reviewCreatorApplication,
   type CreatorApplication,
@@ -19,6 +20,57 @@ function specialtyLabel(specialty: string | null): string {
     default:
       return specialty ?? '—';
   }
+}
+
+/**
+ * Bouton "Voir le document" : le lien signé n'est généré qu'au clic
+ * (pas au chargement de la liste entière), pour éviter de faire un
+ * aller-retour storage par candidature juste pour un affichage.
+ */
+function DocumentLink({ path }: { path: string | null }) {
+  const [isLoading, setIsLoading] = useState(false);
+  const { showError } = useToast();
+
+  if (!path) {
+    return (
+      <span
+        style={{
+          fontSize: 12,
+          color: 'var(--color-text-muted)',
+          fontStyle: 'italic',
+        }}
+      >
+        Aucun document fourni
+      </span>
+    );
+  }
+
+  async function handleClick() {
+    setIsLoading(true);
+    try {
+      const url = await getCreatorDocumentUrl(path);
+      if (!url) {
+        showError('Impossible d’ouvrir le document.');
+        return;
+      }
+      window.open(url, '_blank', 'noopener,noreferrer');
+    } catch (err) {
+      showError(getErrorMessage(err));
+    } finally {
+      setIsLoading(false);
+    }
+  }
+
+  return (
+    <button
+      className="btn btn-outline btn-sm"
+      onClick={handleClick}
+      disabled={isLoading}
+    >
+      <FileText size={14} />
+      {isLoading ? 'Ouverture...' : 'Voir le document'}
+    </button>
+  );
 }
 
 export default function CreatorApplicationsPage() {
@@ -103,6 +155,9 @@ export default function CreatorApplicationsPage() {
                   {app.application_note}
                 </div>
               )}
+              <div style={{ marginTop: 8 }}>
+                <DocumentLink path={app.creator_document_path} />
+              </div>
             </div>
             <button
               className="btn btn-danger btn-sm"

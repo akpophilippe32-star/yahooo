@@ -1433,16 +1433,26 @@ class RecipeRepository {
   }
 
   /// Crée une recette en brouillon à partir d'une vidéo importée.
+  /// `thumbnailPath` : chemin de stockage d'une VRAIE image JPEG
+  /// légère (générée une seule fois à l'import, voir
+  /// CreateVideoRecipePage), stockée dans la colonne `image_url`
+  /// déjà existante. Sans ça, chaque miniature de cette recette
+  /// devait retélécharger un morceau de la vidéo entière juste
+  /// pour en extraire une image — un vrai gaspillage de bande
+  /// passante multiplié par le nombre de fois où la recette
+  /// apparaît en grille/carrousel.
   Future<Map<String, dynamic>> createVideoDraft({
     required String title,
     required String videoPath,
     String? description,
     int? categoryId,
+    String? thumbnailPath,
   }) async {
     final recipe = await createDraft(
       title: title,
       description: description,
       categoryId: categoryId,
+      imageUrl: thumbnailPath,
     );
 
     final recipeId = recipe['id'] ?? recipe['recipe_id'];

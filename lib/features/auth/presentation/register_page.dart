@@ -1,3 +1,6 @@
+import 'dart:io';
+
+import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -34,6 +37,14 @@ class _RegisterPageState extends State<RegisterPage> {
   int _direction = 1;
 
   DateTime? _birthDate;
+
+  // Document justificatif (PDF) pour la candidature créateur.
+  PlatformFile? _selectedDocument;
+
+  // true si l'utilisateur a choisi de sauter l'étape qualifications :
+  // dans ce cas on ne soumet PAS de candidature créateur, même si
+  // l'un des comptes créateur (cuisine/nutrition) avait été sélectionné.
+  bool _qualificationsSkipped = false;
 
   static const List<Color> _colorSwatches = [
     Color(0xFFE8703C),
@@ -105,6 +116,52 @@ class _RegisterPageState extends State<RegisterPage> {
     });
   }
 
+  void _skipCurrentStep() {
+    final isQualificationsStep = _currentStep == _stepQualifications;
+
+    if (isQualificationsStep) {
+      // Sauter la dernière étape = s'inscrire directement, sans
+      // envoyer de candidature créateur.
+      setState(() => _qualificationsSkipped = true);
+      _register();
+      return;
+    }
+
+    setState(() {
+      _direction = 1;
+      _currentStep++;
+    });
+  }
+
+  // ============================================================
+  // DOCUMENT JUSTIFICATIF (PDF)
+  // ============================================================
+
+  Future<void> _pickDocument() async {
+    try {
+      final result = await FilePicker.platform.pickFiles(
+        type: FileType.custom,
+        allowedExtensions: ['pdf'],
+      );
+
+      if (result != null && result.files.isNotEmpty) {
+        setState(() => _selectedDocument = result.files.single);
+      }
+    } catch (error) {
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Impossible de sélectionner le fichier : $error'),
+        ),
+      );
+    }
+  }
+
+  void _removeDocument() {
+    setState(() => _selectedDocument = null);
+  }
+
   // ============================================================
   // INSCRIPTION
   // ============================================================
@@ -134,7 +191,23 @@ class _RegisterPageState extends State<RegisterPage> {
         debugPrint('Impossible d’enregistrer les préférences : $error');
       }
 
-      if (_accountType != 'user') {
+      final wantsCreatorAccount = _accountType != 'user';
+      final shouldSubmitApplication =
+          wantsCreatorAccount && !_qualificationsSkipped;
+
+      if (shouldSubmitApplication) {
+        String? documentPath;
+
+        if (_selectedDocument != null && _selectedDocument!.path != null) {
+          try {
+            documentPath = await _authRepository.uploadCreatorDocument(
+              File(_selectedDocument!.path!),
+            );
+          } catch (error) {
+            debugPrint('Impossible d’envoyer le document : $error');
+          }
+        }
+
         try {
           await _authRepository.submitCreatorApplication(
             specialty: _accountType,
@@ -142,6 +215,7 @@ class _RegisterPageState extends State<RegisterPage> {
                 _applicationNoteController.text.trim().isEmpty
                     ? null
                     : _applicationNoteController.text.trim(),
+            documentPath: documentPath,
           );
         } catch (error) {
           if (!mounted) return;
@@ -164,10 +238,10 @@ class _RegisterPageState extends State<RegisterPage> {
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
           content: Text(
-            _accountType == 'user'
-                ? 'Compte créé avec succès.'
-                : 'Compte créé. Ta demande de statut créateur est '
-                    'en attente de validation par un administrateur.',
+            shouldSubmitApplication
+                ? 'Compte créé. Ta demande de statut créateur est '
+                    'en attente de validation par un administrateur.'
+                : 'Compte créé avec succès.',
           ),
         ),
       );
@@ -245,7 +319,8 @@ class _RegisterPageState extends State<RegisterPage> {
 
   @override
   Widget build(BuildContext context) {
-    final isBirthDateStep = _currentStep == _stepBirthDate;
+    final canSkipCurrentStep =
+        _currentStep == _stepBirthDate || _currentStep == _stepQualifications;
     final colorScheme = Theme.of(context).colorScheme;
 
     return Scaffold(
@@ -358,12 +433,9 @@ class _RegisterPageState extends State<RegisterPage> {
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  if (isBirthDateStep && !_isLoading)
+                  if (canSkipCurrentStep && !_isLoading)
                     TextButton(
-                      onPressed: () => setState(() {
-                        _direction = 1;
-                        _currentStep++;
-                      }),
+                      onPressed: _skipCurrentStep,
                       child: const Text('Passer cette étape'),
                     )
                   else
@@ -735,19 +807,28 @@ class _RegisterPageState extends State<RegisterPage> {
             isSelected: _accountType == 'user',
             title: 'Découvrir et cuisiner',
             subtitle: 'Accès immédiat.',
-            onTap: () => setState(() => _accountType = 'user'),
+            onTap: () => setState(() {
+              _accountType = 'user';
+              _qualificationsSkipped = false;
+            }),
           ),
           _MinimalOptionRow(
             isSelected: _accountType == 'cuisine',
             title: 'Publier mes recettes',
             subtitle: 'Cuisinier·ère, chef ou créateur culinaire.',
-            onTap: () => setState(() => _accountType = 'cuisine'),
+            onTap: () => setState(() {
+              _accountType = 'cuisine';
+              _qualificationsSkipped = false;
+            }),
           ),
           _MinimalOptionRow(
             isSelected: _accountType == 'nutrition',
             title: 'Partager des contenus nutrition',
             subtitle: 'Spécialiste en nutrition.',
-            onTap: () => setState(() => _accountType = 'nutrition'),
+            onTap: () => setState(() {
+              _accountType = 'nutrition';
+              _qualificationsSkipped = false;
+            }),
             isLast: true,
           ),
         ],
@@ -760,7 +841,7 @@ class _RegisterPageState extends State<RegisterPage> {
   // ============================================================
 
   Widget _buildQualificationsStep() {
-    final isNutrition = _accountType == 'nutrition';
+    final colorScheme = Theme.of(context).colorScheme;
 
     return Form(
       key: _stepFormKeys[_stepQualifications],
@@ -778,9 +859,9 @@ class _RegisterPageState extends State<RegisterPage> {
           ),
           const SizedBox(height: 8),
           Text(
-            isNutrition
-                ? 'Décris ton expérience ou tes qualifications.'
-                : 'Décris ton expérience culinaire (facultatif).',
+            'Ces informations sont facultatives : tu peux les compléter '
+            'plus tard depuis ton profil. Un document justificatif aide '
+            'l’admin à valider ta candidature plus vite.',
             style: TextStyle(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -792,19 +873,70 @@ class _RegisterPageState extends State<RegisterPage> {
             maxLines: 5,
             decoration: _underlineDecoration(
               context,
-              label: isNutrition
-                  ? 'EXPÉRIENCE / QUALIFICATIONS'
-                  : 'EXPÉRIENCE (FACULTATIF)',
-              hint: isNutrition
-                  ? 'Ex. diététicien diplômé, 5 ans d’expérience...'
-                  : null,
+              label: 'EXPÉRIENCE / QUALIFICATIONS (FACULTATIF)',
+              hint: 'Ex. diététicien diplômé, 5 ans d’expérience...',
             ),
-            validator: (value) {
-              if (isNutrition && (value == null || value.trim().isEmpty)) {
-                return 'Ce champ aide l’admin à valider ta demande.';
-              }
-              return null;
-            },
+          ),
+          const SizedBox(height: 28),
+          Text(
+            'DOCUMENT JUSTIFICATIF (PDF, FACULTATIF)',
+            style: TextStyle(
+              fontSize: 11,
+              fontWeight: FontWeight.w600,
+              letterSpacing: 0.4,
+              color: colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const SizedBox(height: 10),
+          InkWell(
+            onTap: _pickDocument,
+            borderRadius: BorderRadius.circular(10),
+            child: Container(
+              padding:
+                  const EdgeInsets.symmetric(horizontal: 14, vertical: 14),
+              decoration: BoxDecoration(
+                border: Border.all(color: colorScheme.outline),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Row(
+                children: [
+                  Icon(
+                    Icons.picture_as_pdf_outlined,
+                    color: colorScheme.primary,
+                  ),
+                  const SizedBox(width: 12),
+                  Expanded(
+                    child: Text(
+                      _selectedDocument?.name ??
+                          'Importer un diplôme, certificat...',
+                      maxLines: 1,
+                      overflow: TextOverflow.ellipsis,
+                      style: TextStyle(
+                        fontSize: 13,
+                        color: _selectedDocument == null
+                            ? colorScheme.onSurfaceVariant
+                            : colorScheme.onSurface,
+                        fontWeight: _selectedDocument == null
+                            ? FontWeight.w400
+                            : FontWeight.w600,
+                      ),
+                    ),
+                  ),
+                  if (_selectedDocument != null)
+                    IconButton(
+                      onPressed: _removeDocument,
+                      icon: const Icon(Icons.close, size: 18),
+                      splashRadius: 18,
+                    )
+                  else
+                    Icon(
+                      Icons.upload_file,
+                      size: 18,
+                      color: colorScheme.onSurfaceVariant,
+                    ),
+                ],
+              ),
+            ),
           ),
         ],
       ),

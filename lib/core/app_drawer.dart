@@ -20,6 +20,8 @@ import '../repositories/profile_repository.dart';
 /// "Mes recettes" devient "Devenir créateur" tant que le compte
 /// n'est pas encore créateur — ça n'a pas de sens de proposer une
 /// liste de recettes à quelqu'un qui n'a pas le droit d'en publier.
+/// Pour la même raison, "Ajouter une recette" n'apparaît pas du
+/// tout pour un compte "user" simple.
 ///
 /// Naviguer vers Accueil/Recherche/Plan/Courses depuis une page
 /// profonde (Profil, édition de recette...) réinitialise la pile de
@@ -117,7 +119,8 @@ class _AppDrawerState extends State<AppDrawer> {
           .single();
 
       final role = profile['role'] as String?;
-      return role == 'creator' || role == 'admin';
+      // Un admin ne crée pas de recettes — seul un compte "creator" le peut.
+      return role == 'creator';
     } catch (_) {
       return false;
     }
@@ -312,7 +315,9 @@ class _AppDrawerState extends State<AppDrawer> {
             final fullName = profile?['full_name']?.toString() ?? '';
             final username = profile?['username']?.toString() ?? '';
             final role = profile?['role'] as String? ?? 'user';
-            final isCreator = role == 'creator' || role == 'admin';
+            // Un admin ne crée pas de recettes — seul un compte
+            // "creator" a droit à "Ajouter une recette"/"Mes recettes".
+            final isCreator = role == 'creator';
 
             return ListView(
               padding: EdgeInsets.zero,
@@ -442,11 +447,15 @@ class _AppDrawerState extends State<AppDrawer> {
                   label: 'Accueil',
                   onTap: () => _goToTab(context, 0),
                 ),
-                _FlatDrawerItem(
-                  icon: Icons.add_circle_outline,
-                  label: 'Ajouter une recette',
-                  onTap: () => _openCreateMenu(context),
-                ),
+                // "Ajouter une recette" n'a pas de sens pour un
+                // compte "user" simple : il ne peut pas publier de
+                // recettes tant qu'il n'est pas créateur.
+                if (isCreator)
+                  _FlatDrawerItem(
+                    icon: Icons.add_circle_outline,
+                    label: 'Ajouter une recette',
+                    onTap: () => _openCreateMenu(context),
+                  ),
                 isCreator
                     ? _FlatDrawerItem(
                         icon: Icons.restaurant_menu_outlined,

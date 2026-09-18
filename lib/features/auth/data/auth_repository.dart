@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:flutter/foundation.dart';
 import 'package:supabase_flutter/supabase_flutter.dart';
 
@@ -45,18 +47,47 @@ class AuthRepository {
   /// Soumet une demande de statut Creator (cuisine, nutrition ou
   /// autre spécialité). Le compte reste "user" tant qu'un admin n'a
   /// pas validé la demande — voir submit_creator_application côté
-  /// base de données.
+  /// base de données. `documentPath` est le chemin (dans le bucket
+  /// `creator-documents`) du justificatif PDF déjà uploadé via
+  /// [uploadCreatorDocument], le cas échéant.
   Future<void> submitCreatorApplication({
     required String specialty,
     String? applicationNote,
+    String? documentPath,
   }) async {
     await _supabase.rpc(
       'submit_creator_application',
       params: {
         'p_specialty': specialty,
         'p_application_note': applicationNote,
+        'p_document_path': documentPath,
       },
     );
+  }
+
+  /// Upload le document justificatif (PDF) de la candidature créateur
+  /// vers le bucket privé `creator-documents`, sous
+  /// `<user_id>/document.pdf` (écrase l'ancien si l'utilisateur en
+  /// réenvoie un). Retourne le chemin de stockage à transmettre à
+  /// [submitCreatorApplication].
+  Future<String> uploadCreatorDocument(File file) async {
+    final user = _supabase.auth.currentUser;
+    if (user == null) {
+      throw Exception('Utilisateur non connecté.');
+    }
+
+    final path = '${user.id}/document.pdf';
+
+    await _supabase.storage.from('creator-documents').upload(
+          path,
+          file,
+          fileOptions: const FileOptions(
+            contentType: 'application/pdf',
+            upsert: true,
+          ),
+        );
+
+    return path;
   }
 
   Future<AuthResponse> signIn({
