@@ -6,6 +6,7 @@ import '../../../core/app_drawer.dart';
 import '../../../models/recipe_model.dart';
 import '../../../repositories/profile_repository.dart';
 import '../../../repositories/recipe_repository.dart';
+import '../../../widgets/full_screen_image_viewer.dart';
 import 'recipe_public_view_page.dart';
 
 /// Profil public d'un créateur, consulté par n'importe quel visiteur
@@ -370,19 +371,33 @@ class _CreatorProfilePageState extends State<CreatorProfilePage> {
                             builder: (context, avatarSnapshot) {
                               final url = avatarSnapshot.data;
 
-                              return CircleAvatar(
-                                radius: 36,
-                                backgroundColor:
-                                    colorScheme.surfaceContainerHighest,
-                                backgroundImage:
-                                    url != null ? NetworkImage(url) : null,
-                                child: url == null
-                                    ? Icon(
-                                        Icons.person,
-                                        size: 32,
-                                        color: colorScheme.onSurfaceVariant,
-                                      )
-                                    : null,
+                              return GestureDetector(
+                                onTap: url == null
+                                    ? null
+                                    : () {
+                                        Navigator.of(context).push(
+                                          MaterialPageRoute(
+                                            builder: (context) =>
+                                                FullScreenImageViewer(
+                                              imageUrl: url,
+                                            ),
+                                          ),
+                                        );
+                                      },
+                                child: CircleAvatar(
+                                  radius: 36,
+                                  backgroundColor:
+                                      colorScheme.surfaceContainerHighest,
+                                  backgroundImage:
+                                      url != null ? NetworkImage(url) : null,
+                                  child: url == null
+                                      ? Icon(
+                                          Icons.person,
+                                          size: 32,
+                                          color: colorScheme.onSurfaceVariant,
+                                        )
+                                      : null,
+                                ),
                               );
                             },
                           ),
